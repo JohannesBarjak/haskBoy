@@ -1,0 +1,119 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+module Main where
+
+import Emulator
+import Mmu
+
+import Cpu
+import Cpu.Instructions
+import Ppu
+
+import Test.QuickCheck
+
+import Control.Lens
+import Control.Monad.State.Strict
+
+import Data.Vector qualified as V
+import Data.Word
+import Data.Bits
+
+main :: IO ()
+main = do
+    quickCheck prop_twoCompl
+    quickCheck prop_ReadMemAlwaysZero
+    quickCheck prop_BLensPutGet
+    quickCheck prop_ALensPutGet
+    quickCheck prop_BCLensConsistency
+    quickCheck prop_DecBCRegs
+    quickCheck prop_StackFunConsistency
+    quickCheck prop_RegisterConsistency
+
+testEmulator :: Emulator
+testEmulator = Emulator
+    { _mmu = Mmu
+        { _rom0  = V.replicate 0x4000 0
+        , _rom1  = V.replicate 0x4000 0
+        , _vram  = V.replicate 0x2000 0
+        , _eram  = V.replicate 0x2000 0
+        , _wram0 = V.replicate 0x1000 0
+        , _wram1 = V.replicate 0x1000 0
+        , _oam   = V.replicate 0xA0 0
+        , _ioreg = V.replicate 0x80 0
+        , _hram  = V.replicate 0x7F 0
+        , _ie    = 0
+        }
+    , _cpu = zeroCpu
+    , _ppu = zeroPpu
+    }
+
+zeroCpu :: Cpu
+zeroCpu = Cpu
+    { _register = Register
+        { _af = 0x01B0
+        , _bc = 0x0013
+        , _de = 0x00D8
+        , _hl = 0x014D
+        , _pc = 0x0000
+        , _sp = 0xFFFE
+        }
+    , _tclock = 0
+    }
+
+zeroPpu :: Ppu
+zeroPpu = Ppu
+    { _display = V.replicate 256 (V.replicate 256 C0)
+    , _clock   = 0
+    }
+
+prop_StackFunConsistency :: Word16 -> Bool
+prop_StackFunConsistency v = v == evalState testCode testEmulator
+    where testCode = do
+            pushStack v
+            popStack
+
+prop_RegisterConsistency :: Word16 -> Bool
+prop_RegisterConsistency v = all (v ==) $ evalState testCode testEmulator
+    where testCode = do
+            cpu.register.af .= v
+            cpu.register.bc .= v
+            cpu.register.de .= v
+            cpu.register.hl .= v
+
+            traverse use [cpu.register.af, cpu.register.bc, cpu.register.de, cpu.register.hl]
+
+
+prop_DecBCRegs :: Word8 -> Property
+prop_DecBCRegs x = x > 0 ==> x - 1 == y
+    where y = flip evalState testEmulator $ do
+            cpu.register.b .= x
+            dec (cpu.register.b)
+            use (cpu.register.b)
+
+prop_ReadMemAlwaysZero :: Address -> Property
+prop_ReadMemAlwaysZero nn = (nn < 0xFEA0 || nn > 0xFEFF) ==>
+    evalState (use (mmu.addr nn)) testEmulator == 0
+
+prop_BLensPutGet :: Word8 -> Bool
+prop_BLensPutGet x = evalState (register.b .= x >> use (register.b)) zeroCpu == x
+
+prop_ALensPutGet :: Word8 -> Bool
+prop_ALensPutGet x = evalState (register.a .= x >> use (register.a)) zeroCpu == x
+
+prop_BCLensConsistency :: Word8 -> Word8 -> Bool
+prop_BCLensConsistency x y = flip evalState zeroCpu $ do
+    register.bc .= fromIntegral x `shiftL` 8
+    b1 <- use (register.b)
+    register.b .= x
+    b2 <- use (register.b)
+
+    register.c .= y
+    c2 <- use (register.c)
+    register.bc .= fromIntegral y
+    c1 <- use (register.c)
+
+    pure (c1 == c2 && b1 == b2 && b1 == x && c1 == y)
+
+prop_twoCompl :: Word8 -> Bool
+prop_twoCompl x
+    | x < 128   = twoCompl x >= 0
+    | otherwise = twoCompl x <= 0
