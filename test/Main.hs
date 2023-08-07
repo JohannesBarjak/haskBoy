@@ -6,6 +6,8 @@ import Mmu
 
 import Cpu
 import Cpu.Instructions
+import Cpu.Execution
+
 import Ppu
 
 import Test.QuickCheck

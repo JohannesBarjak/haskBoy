@@ -12,11 +12,14 @@ import Cpu
     , Register(..)
     )
 
-import Ppu ( Color(..), Ppu(..) )
+import Ppu
+    ( ColorIndex(..)
+    , Ppu(..)
+    )
 
 import Data.Word (Word8)
 import Data.Vector qualified as V
-import Data.Vector (fromList)
+import Data.Sequence qualified as Seq
 
 import Control.Lens
 
@@ -41,15 +44,15 @@ logo =
 toMemory :: [Word8] -> Maybe Mmu
 toMemory xs = if length xs <= 0x8000
         then do
-            let _rom0  = fromList $ xs <> replicate 4 0 <> logo <> replicate (0x7FFC - length logo - length xs) 0
-            let _rom1  = V.replicate 0x4000 0
-            let _vram  = V.replicate 0x2000 0
-            let _eram  = V.replicate 0x2000 0
-            let _wram0 = V.replicate 0x1000 0
-            let _wram1 = V.replicate 0x1000 0
-            let _oam   = V.replicate 0xA0 0
-            let _ioreg = V.replicate 0x80 0
-            let _hram  = V.replicate 0x7F 0
+            let _rom0  = Seq.fromList $ xs <> replicate 4 0 <> logo <> replicate (0x7FFC - length logo - length xs) 0
+            let _rom1  = Seq.replicate 0x4000 0
+            let _vram  = Seq.replicate 0x2000 0
+            let _eram  = Seq.replicate 0x2000 0
+            let _wram0 = Seq.replicate 0x1000 0
+            let _wram1 = Seq.replicate 0x1000 0
+            let _oam   = Seq.replicate 0xA0 0
+            let _ioreg = Seq.replicate 0x80 0
+            let _hram  = Seq.replicate 0x7F 0
             let _ie    = 0
             Just $ Mmu {..}
         else Nothing
@@ -63,15 +66,15 @@ initialEmulator _mmu = Emulator
 
 initialMmu :: Mmu
 initialMmu = Mmu
-    { _rom0 = V.replicate 0x4000 0
-    , _rom1 = V.replicate 0x4000 0
-    , _vram  = V.replicate 0x2000 0
-    , _eram  = V.replicate 0x2000 0
-    , _wram0 = V.replicate 0x1000 0
-    , _wram1 = V.replicate 0x1000 0
-    , _oam   = V.replicate 0xA0 0
-    , _ioreg = V.replicate 0x80 0
-    , _hram  = V.replicate 0x7F 0
+    { _rom0  = Seq.replicate 0x4000 0
+    , _rom1  = Seq.replicate 0x4000 0
+    , _vram  = Seq.replicate 0x2000 0
+    , _eram  = Seq.replicate 0x2000 0
+    , _wram0 = Seq.replicate 0x1000 0
+    , _wram1 = Seq.replicate 0x1000 0
+    , _oam   = Seq.replicate 0xA0 0
+    , _ioreg = Seq.replicate 0x80 0
+    , _hram  = Seq.replicate 0x7F 0
     , _ie    = 0
     }
 
@@ -90,7 +93,7 @@ initialCpu = Cpu
 
 initialPpu :: Ppu
 initialPpu = Ppu
-    { _display = V.replicate 256 (V.replicate 256 C0)
+    { _display = V.fromList $ replicate (256 * 256) C0
     , _clock   = 0
     }
 

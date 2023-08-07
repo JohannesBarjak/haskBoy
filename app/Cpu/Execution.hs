@@ -19,9 +19,7 @@ import Numeric (showHex)
 
 execute :: Word8 -> State Emulator ()
 execute = \case
-        0x00 -> do
-            traceM "hello"
-            cpu.tclock += 4
+        0x00 -> cpu.tclock += 4
 
         0xAF -> do
             xorA =<< use (cpu.register.a)
@@ -75,11 +73,6 @@ execute = \case
 
                 7 -> cpu.register.a .= v
                 _ -> error "`Impossible` error on assign byte to register"
-
-
---            case r of
---                _ -> set TCycle 12 --Addr
---                _ -> set TCycle 8
 
         i | i .&. 0xF8 == 0x40 -> do
             cpu.tclock += 4

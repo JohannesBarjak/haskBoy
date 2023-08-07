@@ -1,6 +1,6 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings   #-}
-{-# LAnGUAGE BangPatterns        #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -23,15 +23,18 @@ import Cpu.Execution
 import Ppu
 import Ppu.Execution
 
-import Debug.Trace
-
-import Numeric (showHex)
 import Control.Monad.State.Strict
 import Control.Lens
 
 import Data.Vector qualified as V
 import Data.Vector (Vector)
-import Data.Foldable (for_)
+import Foreign (castPtr, Storable (pokeElemOff), Ptr)
+import Data.Bits
+
+import Control.Monad (when, forM_)
+
+import Debug.Trace (traceM)
+import Numeric (showHex)
 
 hzps, fps, hzpf :: Integer
 hzps = 4194304
@@ -46,14 +49,14 @@ main = do
     SDL.initializeAll
 
     let windowConfig = SDL.defaultWindow 
-            { SDL.windowInitialSize = SDL.V2 160 144
+            { SDL.windowInitialSize = SDL.V2 256 256
             , SDL.windowResizable = True
             }
 
     window <- SDL.createWindow "GameBoy" windowConfig
     renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
 
-    SDL.rendererLogicalSize renderer $= Just (SDL.V2 160 144)
+    SDL.rendererLogicalSize renderer $= Just (SDL.V2 256 256)
 
     filename <- head <$> getArgs
     (Just rom) <- toMemory <$> loadRom filename
@@ -71,33 +74,47 @@ loadRom f = do
 cycleCpu :: Integer -> State Emulator ()
 cycleCpu cycles
     = when (cycles > 0) $ do
-        pc' <- use (cpu.register.pc)
         instr <- consumeByte
-        b' <- use (cpu.register.b)
-        traceM $ "$" ++ showHex pc' "" ++ " b=" ++ show b' ++ "  instr: 0x" ++ showHex instr ""
         execute instr
-        drawTiles
---        grabSprite 0x104 >>= liftIO . print
+
+        printCpuDbgInfo instr
+
         instrCost <- use (cpu.tclock)
         cpu.tclock .= 0
+
         cycleCpu (cycles - instrCost)
+
+printCpuDbgInfo :: Word8 -> State Emulator ()
+printCpuDbgInfo instr = do
+    address <- ("$"  ++) . flip showHex "" <$> use (cpu.register.pc)
+    afreg <- ("af: " ++) . flip showHex "" <$> use (cpu.register.af)
+    bcreg <- ("bc: " ++) . flip showHex "" <$> use (cpu.register.bc)
+    dereg <- ("de: " ++) . flip showHex "" <$> use (cpu.register.de)
+    hlreg <- ("hl: " ++) . flip showHex "" <$> use (cpu.register.hl)
+    let instruction = "instr: 0x" ++ showHex instr ""
+
+    traceM
+        $ address ++ " | " ++ afreg ++ " | " ++ bcreg ++ " | " ++ dereg ++ " | " ++ hlreg ++ " | " ++ instruction
 
 emulatorLoop :: SDL.Renderer -> Emulator -> IO ()
 emulatorLoop renderer emulator = do
-    events <- SDL.pollEvents
     start <- SDL.Raw.getTicks
 
-    let eventIsQPress event =
-            case SDL.eventPayload event of
-                SDL.KeyboardEvent keyboardEvent ->
-                    SDL.keyboardEventKeyMotion keyboardEvent == SDL.Pressed &&
-                    SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == SDL.KeycodeQ
-                _ -> False
-        qPressed = any eventIsQPress events
+    let (rawdp, emulator') = runState (cycleCpu hzpf *> drawTiles *> rawDisplay) emulator
 
-    let (_, !emulator') = runState (cycleCpu hzpf) emulator
+    text <- gbTexture renderer
+    (pixelPtr, _) <- SDL.lockTexture text Nothing
 
-    print $! emulator^.cpu.register.pc
+    let (pixels :: Ptr Word8) = castPtr pixelPtr
+
+    forM_ [0..(256 * 256) - 1] $ \i -> do
+        forM_ [0..3] $ \j -> do
+            pokeElemOff pixels ((i * 4) + j) (rawdp V.! i)
+
+    SDL.unlockTexture text
+
+    SDL.copy renderer text Nothing Nothing
+    SDL.present renderer
 
     end <- SDL.Raw.getTicks
 
@@ -106,23 +123,26 @@ emulatorLoop renderer emulator = do
     when (time < frameTime) $ do
         SDL.delay $ round (frameTime - time)
 
-    SDL.rendererDrawColor renderer $= SDL.V4 26 26 26 26
-    SDL.clear renderer
-    tex <- SDL.createTextureFromSurface renderer =<< gbSurface
-    SDL.copy renderer tex Nothing Nothing
+    emulatorLoop renderer emulator'
 
-    SDL.rendererDrawColor renderer $= SDL.V4 255 255 255 255
-    SDL.fillRect renderer (Just $ SDL.Rectangle (SDL.P $ SDL.V2 0 0) (SDL.V2 160 144))
+rawDisplay :: State Emulator (Vector Word8)
+rawDisplay = mapM colorIndexToPixel =<< use (ppu.display)
 
-    SDL.present renderer
+colorIndexToPixel :: ColorIndex -> State Emulator Word8
+colorIndexToPixel ci = do
+    pallete <- use (mmu.raw 0xFF47)
+    let color = fromIntegral $ (pallete `shiftL` fromEnum ci) .&. 3
+    pure $ ciToPixel (toEnum color)
+    where ciToPixel White     = 255
+          ciToPixel LightGray = 170
+          ciToPixel DarkGray  = 85
+          ciToPixel Black     = 0
 
-    unless qPressed (emulatorLoop renderer emulator')
-
-renderDisplay :: SDL.Texture -> Vector (Vector Color) -> IO ()
-renderDisplay text dis = for_ (V.indexed dis) $ \(j, row) -> do
-    for_ (V.indexed row) $ \(i, v) -> do
-        -- SDL.drawPoint surf (SDL.P $ SDL.V2 j i)
-        pure ()
+drawingExample :: SDL.Renderer -> IO ()
+drawingExample renderer = do
+    text <- gbTexture renderer
+    SDL.updateTexture text Nothing (BS.pack (replicate (256 * 256 * 4) 125)) 256
+    SDL.copy renderer text Nothing Nothing
 
 gbTexture :: SDL.Renderer -> IO SDL.Texture
 gbTexture renderer = SDL.createTexture

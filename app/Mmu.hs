@@ -15,6 +15,7 @@ import Control.Lens
 import Control.Monad.State.Strict
 
 import Data.Vector (Vector)
+import Data.Sequence
 import Data.Word (Word8, Word16)
 import Data.Bits
 
@@ -24,15 +25,15 @@ import Numeric (showHex)
 import Data.Ix (Ix(inRange))
 
 data Mmu = Mmu
-    { _rom0  :: Vector Word8
-    , _rom1  :: Vector Word8
-    , _vram  :: Vector Word8
-    , _eram  :: Vector Word8
-    , _wram0 :: Vector Word8
-    , _wram1 :: Vector Word8
-    , _oam   :: Vector Word8
-    , _ioreg :: Vector Word8
-    , _hram  :: Vector Word8
+    { _rom0  :: Seq Word8
+    , _rom1  :: Seq Word8
+    , _vram  :: Seq Word8
+    , _eram  :: Seq Word8
+    , _wram0 :: Seq Word8
+    , _wram1 :: Seq Word8
+    , _oam   :: Seq Word8
+    , _ioreg :: Seq Word8
+    , _hram  :: Seq Word8
     , _ie    :: Word8
     }
 
