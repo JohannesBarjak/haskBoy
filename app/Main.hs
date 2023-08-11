@@ -130,8 +130,8 @@ rawDisplay = mapM colorIndexToPixel =<< use (ppu.display)
 
 colorIndexToPixel :: ColorIndex -> State Emulator Word8
 colorIndexToPixel ci = do
-    pallete <- use (mmu.raw 0xFF47)
-    let color = fromIntegral $ (pallete `shiftL` fromEnum ci) .&. 3
+    palette <- use (mmu.raw 0xFF47)
+    let color = fromIntegral (palette `shiftR` (fromEnum ci * 2)) .&. 3
     pure $ ciToPixel (toEnum color)
     where ciToPixel White     = 255
           ciToPixel LightGray = 170
