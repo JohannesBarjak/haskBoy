@@ -19,6 +19,8 @@ import Data.Vector qualified as V
 import Data.Word
 import Data.Bits
 
+import Data.Sequence as Seq
+
 main :: IO ()
 main = do
     quickCheck prop_twoCompl
@@ -33,15 +35,15 @@ main = do
 testEmulator :: Emulator
 testEmulator = Emulator
     { _mmu = Mmu
-        { _rom0  = V.replicate 0x4000 0
-        , _rom1  = V.replicate 0x4000 0
-        , _vram  = V.replicate 0x2000 0
-        , _eram  = V.replicate 0x2000 0
-        , _wram0 = V.replicate 0x1000 0
-        , _wram1 = V.replicate 0x1000 0
-        , _oam   = V.replicate 0xA0 0
-        , _ioreg = V.replicate 0x80 0
-        , _hram  = V.replicate 0x7F 0
+        { _rom0  = Seq.replicate 0x4000 0
+        , _rom1  = Seq.replicate 0x4000 0
+        , _vram  = Seq.replicate 0x2000 0
+        , _eram  = Seq.replicate 0x2000 0
+        , _wram0 = Seq.replicate 0x1000 0
+        , _wram1 = Seq.replicate 0x1000 0
+        , _oam   = Seq.replicate 0xA0 0
+        , _ioreg = Seq.replicate 0x80 0
+        , _hram  = Seq.replicate 0x7F 0
         , _ie    = 0
         }
     , _cpu = zeroCpu
@@ -63,7 +65,7 @@ zeroCpu = Cpu
 
 zeroPpu :: Ppu
 zeroPpu = Ppu
-    { _display = V.replicate 256 (V.replicate 256 C0)
+    { _display = V.replicate (256 * 256) C0
     , _clock   = 0
     }
 
