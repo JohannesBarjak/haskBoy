@@ -43,6 +43,11 @@ executable hboy
     hs-source-dirs: app
     default-language: Haskell2010
 
+library
+    exposed-modules: HaskBoy
+    build-depends:    base ^>=4.17.1.0
+    default-language: Haskell2010
+
 test-suite hboy-test
     Main-is:          Main.hs
     type:             exitcode-stdio-1.0
