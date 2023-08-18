@@ -381,6 +381,16 @@ execute = \case
             v <- consumeByte
             cpu.register.a <~ use (mmu.addr (0xFF00 + fromIntegral v))
 
+        0xBE -> do
+            nn <- use (cpu.register.hl)
+            cmp =<< use (mmu.addr nn)
+            cpu.tclock += 8
+
+        0x86 -> do
+            nn <- use (cpu.register.hl)
+            add =<< use (mmu.addr nn)
+            cpu.tclock += 8
+
         0xFE -> do
             cmp =<< consumeByte
             cpu.tclock += 8

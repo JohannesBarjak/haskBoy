@@ -5,7 +5,7 @@ module Cpu.Instructions
     , xorA
     , jr, call, ret
     , cmp
-    , sub, sbc
+    , add, sub, sbc
     , rl, bit
     , consumeByte, consumeWord
     , popStack, pushStack
@@ -87,6 +87,17 @@ sbc v = zoom cpu $ do
     register.hcarry .= ((v .&. 0xF) + fromIntegral (fromEnum oldCarry) > a' .&. 0xF)
     register.zero <~ (use (register.a) <&> (== 0))
     register.subOp .= True
+
+add :: Word8 -> State Emulator ()
+add v = zoom cpu $ do
+    a' <- use (register.a)
+    register.hcarry .= ((a' .&. 0xF) +  (v .&. 0xF) > 0xF)
+    register.carry .= (fromIntegral a' + fromIntegral v > (0xFF :: Int))
+
+    register.a .= (a' + v)
+
+    register.zero <~ (use (register.a) <&> (== 0))
+    register.subOp .= False
 
 sub :: Word8 -> State Emulator ()
 sub v = zoom cpu $ do
