@@ -18,8 +18,8 @@ import Data.Vector (Vector)
 import Data.Bits (Bits((.&.), shiftR))
 
 data Ppu = Ppu
-    { _display   :: Vector Pixel
-    , _clock     :: Integer
+    { _display :: Vector Pixel -- ^ Gameboy's 256x256 logical display
+    , _clock   :: Integer
     }
 
 data Color
