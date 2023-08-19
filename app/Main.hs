@@ -80,9 +80,14 @@ cycleCpu cycles
         printCpuDbgInfo instr
 
         instrCost <- use (cpu.tclock)
+        runlyTiming (cycles - instrCost)
         cpu.tclock .= 0
 
         cycleCpu (cycles - instrCost)
+
+runlyTiming :: Integer -> State Emulator ()
+runlyTiming cycles = do
+    mmu.ly .= fromIntegral (((hzpf - cycles) `quot` 456) `rem` 154)
 
 printCpuDbgInfo :: Word8 -> State Emulator ()
 printCpuDbgInfo instr = do
