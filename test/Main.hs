@@ -6,10 +6,10 @@ import Mmu
 
 import Cpu
 import Cpu.Instructions
-import Cpu.Execution
 
 import Ppu
 
+import Test.Hspec
 import Test.QuickCheck
 
 import Control.Lens
@@ -20,9 +20,11 @@ import Data.Word
 import Data.Bits
 
 import Data.Sequence as Seq
+import Data.Bool (bool)
 
 main :: IO ()
 main = do
+    testToPixelToColor
     quickCheck prop_twoCompl
     quickCheck prop_ReadMemAlwaysZero
     quickCheck prop_BLensPutGet
@@ -32,9 +34,40 @@ main = do
     quickCheck prop_StackFunConsistency
     quickCheck prop_RegisterConsistency
 
+testToPixelToColor :: IO ()
+testToPixelToColor = hspec $ do
+    describe "Ppu.toPixel" $ do
+        it "Converts a pair of booleans to a pixel" $ do
+            toPixel False False `shouldBe` I0
+            toPixel False True  `shouldBe` I1
+            toPixel True  False `shouldBe` I2
+            toPixel True  True  `shouldBe` I3
+        
+    describe "Ppu.toColor" $ do
+        it "Converts from pixel to color" $ do
+            property $ \pixel ->
+                        result 0xE4 pixel == toEnum (fromEnum pixel) &&
+                        result 0x1B pixel == toEnum (3 - fromEnum pixel) &&
+                        result 0x00 pixel == White &&
+                        result 0x55 pixel == LightGray &&
+                        result 0xAA pixel == DarkGray &&
+                        result 0xFF pixel == Black
+
+    where result :: Word8 -> Pixel -> Color
+          result palette pixel = flip evalState testMmu $ do
+            raw 0xFF47 .= palette
+            toColor pixel
+
+
 testEmulator :: Emulator
 testEmulator = Emulator
-    { _mmu = Mmu
+    { _mmu = testMmu
+    , _cpu = testCpu
+    , _ppu = testPpu
+    }
+
+testMmu :: Mmu
+testMmu = Mmu
         { _rom0  = Seq.replicate 0x4000 0
         , _rom1  = Seq.replicate 0x4000 0
         , _vram  = Seq.replicate 0x2000 0
@@ -46,12 +79,9 @@ testEmulator = Emulator
         , _hram  = Seq.replicate 0x7F 0
         , _ie    = 0
         }
-    , _cpu = zeroCpu
-    , _ppu = zeroPpu
-    }
 
-zeroCpu :: Cpu
-zeroCpu = Cpu
+testCpu :: Cpu
+testCpu = Cpu
     { _register = Register
         { _af = 0x01B0
         , _bc = 0x0013
@@ -63,8 +93,8 @@ zeroCpu = Cpu
     , _tclock = 0
     }
 
-zeroPpu :: Ppu
-zeroPpu = Ppu
+testPpu :: Ppu
+testPpu = Ppu
     { _display = V.replicate (256 * 256) (toPixel False False)
     , _clock   = 0
     }
@@ -98,13 +128,13 @@ prop_ReadMemAlwaysZero nn = (nn < 0xFEA0 || nn > 0xFEFF) ==>
     evalState (use (mmu.addr nn)) testEmulator == 0
 
 prop_BLensPutGet :: Word8 -> Bool
-prop_BLensPutGet x = evalState (register.b .= x >> use (register.b)) zeroCpu == x
+prop_BLensPutGet x = evalState (register.b .= x >> use (register.b)) testCpu == x
 
 prop_ALensPutGet :: Word8 -> Bool
-prop_ALensPutGet x = evalState (register.a .= x >> use (register.a)) zeroCpu == x
+prop_ALensPutGet x = evalState (register.a .= x >> use (register.a)) testCpu == x
 
 prop_BCLensConsistency :: Word8 -> Word8 -> Bool
-prop_BCLensConsistency x y = flip evalState zeroCpu $ do
+prop_BCLensConsistency x y = flip evalState testCpu $ do
     register.bc .= fromIntegral x `shiftL` 8
     b1 <- use (register.b)
     register.b .= x

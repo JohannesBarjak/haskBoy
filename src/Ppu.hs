@@ -2,13 +2,15 @@
 
 module Ppu
     ( Ppu(..)
-    , Pixel
+    , Pixel(..)
     , Color(..)
-    , toPixel
+    , toPixel, toColor
     , display, clock
     ) where
 
 import Mmu (Mmu, raw)
+
+import Test.QuickCheck.Arbitrary
 
 import Control.Lens (makeLenses, use)
 import Control.Monad.State.Strict (State)
@@ -25,14 +27,14 @@ data Color
     | LightGray
     | DarkGray
     | Black
-    deriving Enum
+    deriving (Enum, Eq)
 
 data Pixel
     = I0
     | I1
     | I2
     | I3
-    deriving Enum
+    deriving (Bounded, Enum, Eq, Show)
 
 data PPUMode
     = HBlank
@@ -41,6 +43,9 @@ data PPUMode
     | VRAMRead deriving Enum
 
 makeLenses ''Ppu
+
+instance Arbitrary Pixel where
+    arbitrary = arbitraryBoundedEnum
 
 toPixel :: Bool -> Bool -> Pixel
 toPixel ub lb = toEnum (fromEnum ub * 2 + fromEnum lb)
