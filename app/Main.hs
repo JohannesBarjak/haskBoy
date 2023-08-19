@@ -128,7 +128,7 @@ emulatorLoop renderer emulator = do
 rawDisplay :: State Emulator (Vector Word8)
 rawDisplay = mapM colorIndexToPixel =<< use (ppu.display)
 
-colorIndexToPixel :: ColorIndex -> State Emulator Word8
+colorIndexToPixel :: Pixel -> State Emulator Word8
 colorIndexToPixel ci = do
     palette <- use (mmu.raw 0xFF47)
     let color = fromIntegral (palette `shiftR` (fromEnum ci * 2)) .&. 3

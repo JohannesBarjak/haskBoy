@@ -28,7 +28,7 @@ drawTiles = do
 
     ppu.display .= writeTiles t dp
 
-writeTiles :: [[Vector ColorIndex]] -> Vector ColorIndex -> Vector ColorIndex
+writeTiles :: [[Vector Pixel]] -> Vector Pixel -> Vector Pixel
 writeTiles ts dp = runST $ do
     mdp <- V.thaw dp
     for_ (zip [0..] ts) $ \(k, tl) -> do
@@ -40,13 +40,13 @@ writeTiles ts dp = runST $ do
                 VM.write mdp (((y + i) * 32) + (x + j)) v
     V.freeze mdp
 
-tiles :: State Mmu [[Vector ColorIndex]]
+tiles :: State Mmu [[Vector Pixel]]
 tiles = mapM rowPack =<< tileMaps
 
 tileMaps :: State Mmu [Word8]
 tileMaps = sequence [use (addr (0x9800 + (y * 32) + x)) | y <- [0..31], x <- [0..31]]
 
-rowPack :: Word8 -> State Mmu [Vector ColorIndex]
+rowPack :: Word8 -> State Mmu [Vector Pixel]
 rowPack tmIndex = mapM (fmap (uncurry tileRow) . tileBytes) [0..7]
 
     where tileBytes :: Word8 -> State Mmu (Word8, Word8)
@@ -58,22 +58,17 @@ rowPack tmIndex = mapM (fmap (uncurry tileRow) . tileBytes) [0..7]
           si = 0x8000 + fromIntegral tmIndex
 
 -- tileRow converts two bytes into a row of pixels
-tileRow :: Word8 -> Word8 -> Vector ColorIndex
-tileRow v1 v2 = V.map toEnum $ V.zipWith (+) lowerPixelBits upperPixelBits
-    -- These lists contain the upper and lower bits of the row's pixels
-    where lowerPixelBits = toBits v1
-          upperPixelBits = V.map (*2) (toBits v2)
+tileRow :: Word8 -> Word8 -> Vector Pixel
+tileRow v1 v2 = V.fromList $ zipWith toPixel (toBits v1) (toBits v2)
+    -- This function converts a byte into a list of booleans
+    where toBits :: Word8 -> [Bool]
+          toBits v = [toEnum . fromIntegral $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
 
-          toBits :: Word8 -> Vector Int
-          toBits v = do
-                i <- V.fromList [7,6..0]
-                pure $ fromIntegral $ (v `shiftR` i) .&. 1
-
-ppumode :: Lens' Mmu PPUMode
+ppumode :: Lens' Mmu Pixel
 ppumode = lens _ppumode $ \mmu' v ->
     mmu'&raw 0xFF41 .~ ((mmu'^?!raw 0xFF41) .&. 0xFC) .|. fromIntegral (fromEnum v)
 
-_ppumode :: Mmu -> PPUMode
+_ppumode :: Mmu -> Pixel
 _ppumode mmu' = toEnum . fromIntegral $ (mmu'^?!raw 0xFF41) .&. 3
 
 scx, scy :: Lens' Mmu Word8

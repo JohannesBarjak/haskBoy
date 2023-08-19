@@ -25,11 +25,12 @@ executable hboy
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    other-modules: Emulator Mmu Cpu Cpu.Instructions Cpu.Execution Ppu Ppu.Execution
+    other-modules: Emulator Cpu Cpu.Instructions Cpu.Execution Ppu.Execution
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
     build-depends:    base      ^>=4.17.1.0
+                    , haskBoy
                     , mtl       ^>=2.3.1
                     , hspec     ^>=2.11.4
                     , QuickCheck^>=2.14.2
@@ -44,8 +45,14 @@ executable hboy
     default-language: Haskell2010
 
 library
-    exposed-modules: HaskBoy
-    build-depends:    base ^>=4.17.1.0
+    exposed-modules: HaskBoy Mmu Ppu
+    build-depends:    base      ^>=4.17.1.0
+                    , mtl       ^>=2.3.1
+                    , vector    ^>=0.13.0.0
+                    , containers^>=0.6.7
+                    , lens      ^>=5.2.2
+
+    hs-source-dirs: src
     default-language: Haskell2010
 
 test-suite hboy-test

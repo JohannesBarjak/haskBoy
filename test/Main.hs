@@ -65,7 +65,7 @@ zeroCpu = Cpu
 
 zeroPpu :: Ppu
 zeroPpu = Ppu
-    { _display = V.replicate (256 * 256) C0
+    { _display = V.replicate (256 * 256) (toPixel False False)
     , _clock   = 0
     }
 

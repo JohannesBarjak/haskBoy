@@ -13,8 +13,8 @@ import Cpu
     )
 
 import Ppu
-    ( ColorIndex(..)
-    , Ppu(..)
+    ( Ppu(..)
+    , toPixel
     )
 
 import Data.Word (Word8)
@@ -93,7 +93,7 @@ initialCpu = Cpu
 
 initialPpu :: Ppu
 initialPpu = Ppu
-    { _display = V.fromList $ replicate (256 * 256) C0
+    { _display = V.fromList $ replicate (256 * 256) (toPixel False False)
     , _clock   = 0
     }
 
