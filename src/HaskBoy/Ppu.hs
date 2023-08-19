@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Ppu
+module HaskBoy.Ppu
     ( Ppu(..)
     , Pixel(..)
     , Color(..)
@@ -8,7 +8,7 @@ module Ppu
     , display, clock
     ) where
 
-import Mmu (Mmu, raw)
+import HaskBoy.Mmu (Mmu, raw)
 
 import Test.QuickCheck.Arbitrary
 
@@ -47,9 +47,16 @@ makeLenses ''Ppu
 instance Arbitrary Pixel where
     arbitrary = arbitraryBoundedEnum
 
-toPixel :: Bool -> Bool -> Pixel
+-- | 'toPixel' converts a pair of booleans into a 'Pixel'
+toPixel
+    :: Bool -- ^ Upper bit
+    -> Bool -- ^ Lower bit
+    -> Pixel
+
 toPixel ub lb = toEnum (fromEnum ub * 2 + fromEnum lb)
 
+-- | 'toColor' uses the gameboy's color palette
+-- at 0xFF47 to convert a 'Pixel' into a 'Color'
 toColor :: Pixel -> State Mmu Color
 toColor pixel = do
     palette <- use (raw 0xFF47)

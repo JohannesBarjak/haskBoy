@@ -12,7 +12,7 @@ module Cpu.Instructions
     ) where
 
 import Emulator
-import Mmu
+import HaskBoy.Mmu
 import Cpu
 
 import Debug.Trace (traceM)

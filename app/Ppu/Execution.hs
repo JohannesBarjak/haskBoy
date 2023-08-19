@@ -3,8 +3,9 @@
 module Ppu.Execution where
 
 import Emulator
-import Mmu
-import Ppu
+
+import HaskBoy.Mmu
+import HaskBoy.Ppu
 
 import Control.Lens
 import Control.Monad.State.Strict

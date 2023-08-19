@@ -14,13 +14,13 @@ import Data.ByteString qualified as BS
 
 import Emulator
 
-import Mmu
+import HaskBoy.Mmu
 
 import Cpu
 import Cpu.Instructions
 import Cpu.Execution
 
-import Ppu
+import HaskBoy.Ppu
 import Ppu.Execution
 
 import Control.Monad.State.Strict

@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes      #-}
 
-module Mmu
+module HaskBoy.Mmu
     ( Address
     , Mmu(..)
     , addr, raw

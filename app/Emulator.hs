@@ -5,14 +5,14 @@
 
 module Emulator where
 
-import Mmu (Mmu(..))
+import HaskBoy.Mmu (Mmu(..))
 
 import Cpu
     ( Cpu(..)
     , Register(..)
     )
 
-import Ppu
+import HaskBoy.Ppu
     ( Ppu(..)
     , toPixel
     )
