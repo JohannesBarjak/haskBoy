@@ -4,10 +4,8 @@
 module HaskBoy.Mmu
     ( Address
     , Mmu(..)
-    , addr, raw
-    , addr16
-    , readByte, writeByte
-    , readWord, writeWord
+    , addr, addr16
+    , raw
     ) where
 
 import Control.Lens
@@ -58,17 +56,17 @@ makeLenses ''Mmu
 
 -- | Restricted access to the 'Mmu'
 addr :: Address -> Lens' Mmu Word8
-addr i = lens (readByte' i) (flip $ writeByte' i)
+addr i = lens (readByte i) (flip $ writeByte i)
 
 -- | Provides restricted access to a Word in the 'Mmu'.
 -- The Word is created by a least and most significant byte
 -- in little endian order
 addr16 :: Address -> Lens' Mmu Word16
-addr16 i = lens (readWord' i) (flip $ writeWord' i)
+addr16 i = lens (readWord i) (flip $ writeWord i)
 
 -- | Unrestricted access to the 'Mmu'
 raw :: Address -> Lens' Mmu Word8
-raw idx = lens (readByte' idx) $ \mem v -> case addrType idx of
+raw idx = lens (readByte idx) $ \mem v -> case addrType idx of
     Bank0  i -> mem&rom0.ix i .~ v
     Bank1  i -> mem&rom1.ix i .~ v
     VRam   i -> mem&vram.ix i .~ v
@@ -83,32 +81,13 @@ raw idx = lens (readByte' idx) $ \mem v -> case addrType idx of
     HRam   i -> mem&oam.ix i .~ v
     Ie       -> mem&ie .~ v
 
-readByte :: Address -> State Mmu Word8
-readByte idx = readByte' idx <$> get
+readWord :: Address -> Mmu -> Word16
+readWord i mmu' = fromIntegral ub `shiftL` 8 .|. fromIntegral lb
+    where ub = readByte (i + 1) mmu'
+          lb = readByte i mmu'
 
-writeByte :: Address -> Word8 -> State Mmu ()
-writeByte idx v = modify $ writeByte' idx v
-
-readWord :: Address -> State Mmu Word16
-readWord i = do
-    ub <- readByte (i + 1)
-    lb <- readByte i
-
-    pure $ fromIntegral ub `shiftL` 8 .|. fromIntegral lb
-
-readWord' :: Address -> Mmu -> Word16
-readWord' i mmu' = fromIntegral ub `shiftL` 8 .|. fromIntegral lb
-    where ub = readByte' (i + 1) mmu'
-          lb = readByte' i mmu'
-
-writeWord :: Address -> Word16 -> State Mmu ()
-writeWord i v = do
-    writeByte (i + 1) ub
-    writeByte i lb
-    where (ub, lb) = (fromIntegral $ v `shiftR` 8, fromIntegral $ v .&. 0xFF)
-
-writeWord' :: Address -> Word16 -> Mmu -> Mmu
-writeWord' i v mmu' = writeByte' i lb $ writeByte' (i + 1) ub mmu'
+writeWord :: Address -> Word16 -> Mmu -> Mmu
+writeWord i v mmu' = writeByte i lb $ writeByte (i + 1) ub mmu'
     where ub = fromIntegral $ v `shiftR` 8
           lb = fromIntegral $ v .&. 0xFF
 
@@ -129,8 +108,8 @@ addrType i
     | inRange (0xFF80, 0xFFFE) i = HRam   $ fromIntegral i - 0xFF80
     | otherwise                  = Ie
 
-readByte' :: Address -> Mmu -> Word8
-readByte' idx mem = do
+readByte :: Address -> Mmu -> Word8
+readByte idx mem = do
     case addrType idx of
         Bank0  i -> mem^?!rom0.ix i
         Bank1  i -> mem^?!rom1.ix i
@@ -146,8 +125,8 @@ readByte' idx mem = do
         HRam   i -> mem^?!hram.ix i
         Ie       -> mem^?!ie
 
-writeByte' :: Address -> Word8 -> Mmu -> Mmu
-writeByte' idx v mem = do
+writeByte :: Address -> Word8 -> Mmu -> Mmu
+writeByte idx v mem = do
     case addrType idx of
         Bank0  _ -> trace (invalidWriteMessage "Bank0") mem
         Bank1  _ -> trace (invalidWriteMessage "Bank1") mem
