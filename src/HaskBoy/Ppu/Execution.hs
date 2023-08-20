@@ -1,6 +1,6 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 
-module Ppu.Execution where
+module HaskBoy.Ppu.Execution where
 
 import HaskBoy.Emulator
 

@@ -21,7 +21,7 @@ import Cpu.Instructions
 import Cpu.Execution
 
 import HaskBoy.Ppu
-import Ppu.Execution
+import HaskBoy.Ppu.Execution
 
 import Control.Monad.State.Strict
 import Control.Lens
