@@ -23,9 +23,10 @@ import Foreign.Marshal (toBool)
 
 data Cpu = Cpu
     { _register :: Register
-    , _tclock   :: Integer
+    , _tclock   :: Integer -- ^ The Cpu clock uses tcycles
     }
 
+-- | Store 16bit registers
 data Register = Register
     { _af :: Word16
     , _bc :: Word16
@@ -113,7 +114,7 @@ assignBit :: Register -> Int -> Bool -> Register
 assignBit r i True  = r&flag .~ r^.flag .|. (1 `shiftL` i)
 assignBit r i False = r&flag .~ r^.flag .&. complement (1 `shiftL` i)
 
--- Two's complement is used in some instructions to get signed args
+-- | Convert byte into a signed 'Int' using two's complement
 twoCompl :: Word8 -> Int
 twoCompl r8
     | r8 < 128  = fromIntegral r8

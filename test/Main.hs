@@ -17,14 +17,16 @@ import Control.Monad.State.Strict
 
 import Data.Vector qualified as V
 import Data.Word
-import Data.Bits
 
 import Data.Sequence as Seq
 import Test.Hspec.QuickCheck (modifyMaxSuccess)
+import Data.Foldable (for_)
 
 main :: IO ()
 main = do
     hspec $ do
+        describe "HaskBoy.Cpu" $ do
+            testRegisters
         describe "HaskBoy.Mmu" $ do
             testAddr
             testAddr16
@@ -32,17 +34,11 @@ main = do
             testToPixel
             testToColor
 
-    quickCheck prop_twoCompl
-    quickCheck prop_ReadMemAlwaysZero
-    quickCheck prop_BLensPutGet
-    quickCheck prop_ALensPutGet
-    quickCheck prop_BCLensConsistency
     quickCheck prop_DecBCRegs
     quickCheck prop_StackFunConsistency
-    quickCheck prop_RegisterConsistency
 
 testAddr :: Spec
-testAddr = describe "Mmu.addr" $ do
+testAddr = describe "addr" $ do
     context "when writing to rom" . modifyMaxSuccess (const 0x8000) $
         it "ignores writes" $
             forAll (choose (0,0x7FFF)) $ \nn v ->
@@ -53,7 +49,7 @@ testAddr = describe "Mmu.addr" $ do
                 evalState ((addr nn .= v) *> use (addr nn)) testMmu == v
 
 testAddr16 :: Spec
-testAddr16 = describe "Mmu.addr16" $ do
+testAddr16 = describe "addr16" $ do
     context "when writing to wram" $
         it "writes bytes in little endian" $
             evalState littleEndianTestCode testMmu == (0x06, 0xB9)
@@ -64,7 +60,7 @@ testAddr16 = describe "Mmu.addr16" $ do
 
 testToPixel :: Spec
 testToPixel =
-    describe "Ppu.toPixel" $ do
+    describe "toPixel" $ do
         it "converts a pair of booleans to a pixel" $ do
             toPixel False False `shouldBe` I0
             toPixel True  False `shouldBe` I1
@@ -73,7 +69,7 @@ testToPixel =
         
 testToColor :: Spec
 testToColor =
-    describe "Ppu.toColor" $ do
+    describe "toColor" $ do
         it "converts from pixel to color" $ do
             property $ \pixel ->
                         result 0xE4 pixel == toEnum (fromEnum pixel) &&
@@ -87,6 +83,29 @@ testToColor =
           result palette pixel = flip evalState testMmu $ do
             raw 0xFF47 .= palette
             toColor pixel
+
+testRegisters :: Spec
+testRegisters = do
+    describe "16bit registers" $
+        it "writes a value to 16bit registers and checks write integrity" $
+            property $ \v -> all (v ==) (evalState (test16BitRegisters v) testCpu)
+    describe "8bit registers" $
+        it "writes a value to 8bit registers and checks write integrity" $
+            property $ \v -> all (v ==) (evalState (test8BitRegisters v) testCpu)
+
+    where test16BitRegisters :: Word16 -> State Cpu [Word16]
+          test16BitRegisters v = do
+            for_ [af, bc, de, hl, pc, sp] $ \r -> do
+                register.r .= v
+
+            traverse (use . (register.)) [af, bc, de, hl, pc, sp]
+
+          test8BitRegisters :: Word8 -> State Cpu [Word8]
+          test8BitRegisters v = do
+            for_ [a, flag, b, c, d, e, h, l] $ \r -> do
+                register.r .= v
+            
+            traverse (use . (register.)) [a, flag, b, c, d, e, h, l]
 
 testEmulator :: Emulator
 testEmulator = Emulator
@@ -134,48 +153,9 @@ prop_StackFunConsistency v = v == evalState testCode testEmulator
             pushStack v
             popStack
 
-prop_RegisterConsistency :: Word16 -> Bool
-prop_RegisterConsistency v = all (v ==) $ evalState testCode testEmulator
-    where testCode = do
-            cpu.register.af .= v
-            cpu.register.bc .= v
-            cpu.register.de .= v
-            cpu.register.hl .= v
-
-            traverse use [cpu.register.af, cpu.register.bc, cpu.register.de, cpu.register.hl]
-
 prop_DecBCRegs :: Word8 -> Property
 prop_DecBCRegs x = x > 0 ==> x - 1 == y
     where y = flip evalState testEmulator $ do
             cpu.register.b .= x
             dec (cpu.register.b)
             use (cpu.register.b)
-
-prop_ReadMemAlwaysZero :: Address -> Property
-prop_ReadMemAlwaysZero nn = (nn < 0xFEA0 || nn > 0xFEFF) ==>
-    evalState (use (mmu.addr nn)) testEmulator == 0
-
-prop_BLensPutGet :: Word8 -> Bool
-prop_BLensPutGet x = evalState (register.b .= x >> use (register.b)) testCpu == x
-
-prop_ALensPutGet :: Word8 -> Bool
-prop_ALensPutGet x = evalState (register.a .= x >> use (register.a)) testCpu == x
-
-prop_BCLensConsistency :: Word8 -> Word8 -> Bool
-prop_BCLensConsistency x y = flip evalState testCpu $ do
-    register.bc .= fromIntegral x `shiftL` 8
-    b1 <- use (register.b)
-    register.b .= x
-    b2 <- use (register.b)
-
-    register.c .= y
-    c2 <- use (register.c)
-    register.bc .= fromIntegral y
-    c1 <- use (register.c)
-
-    pure (c1 == c2 && b1 == b2 && b1 == x && c1 == y)
-
-prop_twoCompl :: Word8 -> Bool
-prop_twoCompl x
-    | x < 128   = twoCompl x >= 0
-    | otherwise = twoCompl x <= 0
