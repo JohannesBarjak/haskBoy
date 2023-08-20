@@ -2,12 +2,12 @@
 module Main where
 
 import Emulator
-import Mmu
+import HaskBoy.Mmu
 
 import Cpu
 import Cpu.Instructions
 
-import Ppu
+import HaskBoy.Ppu
 
 import Test.Hspec
 import Test.QuickCheck
@@ -20,7 +20,6 @@ import Data.Word
 import Data.Bits
 
 import Data.Sequence as Seq
-import Data.Bool (bool)
 
 main :: IO ()
 main = do
@@ -39,8 +38,8 @@ testToPixelToColor = hspec $ do
     describe "Ppu.toPixel" $ do
         it "Converts a pair of booleans to a pixel" $ do
             toPixel False False `shouldBe` I0
-            toPixel False True  `shouldBe` I1
-            toPixel True  False `shouldBe` I2
+            toPixel True  False `shouldBe` I1
+            toPixel False True  `shouldBe` I2
             toPixel True  True  `shouldBe` I3
         
     describe "Ppu.toColor" $ do

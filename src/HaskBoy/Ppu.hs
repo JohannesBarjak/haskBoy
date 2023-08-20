@@ -49,11 +49,11 @@ instance Arbitrary Pixel where
 
 -- | 'toPixel' converts a pair of booleans into a 'Pixel'
 toPixel
-    :: Bool -- ^ Upper bit
-    -> Bool -- ^ Lower bit
+    :: Bool -- ^ Lower bit
+    -> Bool -- ^ Upper bit
     -> Pixel
 
-toPixel ub lb = toEnum (fromEnum ub * 2 + fromEnum lb)
+toPixel lb ub = toEnum (fromEnum ub * 2 + fromEnum lb)
 
 -- | 'toColor' uses the gameboy's color palette
 -- at 0xFF47 to convert a 'Pixel' into a 'Color'
