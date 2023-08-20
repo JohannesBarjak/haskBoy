@@ -88,20 +88,20 @@ testRegisters :: Spec
 testRegisters = do
     describe "16bit registers" $
         it "writes a value to 16bit registers and checks write integrity" $
-            property $ \v -> all (v ==) (evalState (test16BitRegisters v) testCpu)
+            property $ \v -> all (v ==) (evalState (write16BitRegisters v) testCpu)
     describe "8bit registers" $
         it "writes a value to 8bit registers and checks write integrity" $
-            property $ \v -> all (v ==) (evalState (test8BitRegisters v) testCpu)
+            property $ \v -> all (v ==) (evalState (write8BitRegisters v) testCpu)
 
-    where test16BitRegisters :: Word16 -> State Cpu [Word16]
-          test16BitRegisters v = do
+    where write16BitRegisters :: Word16 -> State Cpu [Word16]
+          write16BitRegisters v = do
             for_ [af, bc, de, hl, pc, sp] $ \r -> do
                 register.r .= v
 
             traverse (use . (register.)) [af, bc, de, hl, pc, sp]
 
-          test8BitRegisters :: Word8 -> State Cpu [Word8]
-          test8BitRegisters v = do
+          write8BitRegisters :: Word8 -> State Cpu [Word8]
+          write8BitRegisters v = do
             for_ [a, flag, b, c, d, e, h, l] $ \r -> do
                 register.r .= v
             
