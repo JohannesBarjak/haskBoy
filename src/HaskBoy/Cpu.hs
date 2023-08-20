@@ -21,6 +21,11 @@ import Data.Bits (Bits(shiftL, shiftR, complement), (.|.), (.&.))
 
 import Foreign.Marshal (toBool)
 
+data Cpu = Cpu
+    { _register :: Register
+    , _tclock   :: Integer
+    }
+
 data Register = Register
     { _af :: Word16
     , _bc :: Word16
@@ -30,13 +35,8 @@ data Register = Register
     , _pc :: Word16
     }
 
-data Cpu = Cpu
-    { _register :: Register
-    , _tclock   :: Integer
-    }
-
-makeLenses ''Register
 makeLenses ''Cpu
+makeLenses ''Register
 
 a :: Lens' Register Word8
 a = lens _a (\reg v -> reg&af %~ setUpperByte v)
