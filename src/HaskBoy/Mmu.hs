@@ -56,12 +56,17 @@ data AddrType
 
 makeLenses ''Mmu
 
+-- | Restricted access to the 'Mmu'
 addr :: Address -> Lens' Mmu Word8
 addr i = lens (readByte' i) (flip $ writeByte' i)
 
+-- | Provides restricted access to a Word in the 'Mmu'.
+-- The Word is created by a least and most significant byte
+-- in little endian order
 addr16 :: Address -> Lens' Mmu Word16
 addr16 i = lens (readWord' i) (flip $ writeWord' i)
 
+-- | Unrestricted access to the 'Mmu'
 raw :: Address -> Lens' Mmu Word8
 raw idx = lens (readByte' idx) $ \mem v -> case addrType idx of
     Bank0  i -> mem&rom0.ix i .~ v
