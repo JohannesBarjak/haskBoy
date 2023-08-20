@@ -7,7 +7,7 @@ module Emulator where
 
 import HaskBoy.Mmu (Mmu(..))
 
-import Cpu
+import HaskBoy.Cpu
     ( Cpu(..)
     , Register(..)
     )

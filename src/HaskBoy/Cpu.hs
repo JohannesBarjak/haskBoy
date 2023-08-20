@@ -4,7 +4,7 @@
 {-# LANGUAGE NamedFieldPuns  #-}
 {-# LANGUAGE RankNTypes      #-}
 
-module Cpu
+module HaskBoy.Cpu
     ( Register(..)
     , af, bc, de, hl, sp, pc
     , a, flag, b, c, d, e, h, l

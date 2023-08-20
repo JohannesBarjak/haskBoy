@@ -4,7 +4,7 @@ module Main where
 import Emulator
 import HaskBoy.Mmu
 
-import Cpu
+import HaskBoy.Cpu
 import Cpu.Instructions
 
 import HaskBoy.Ppu

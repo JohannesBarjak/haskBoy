@@ -13,7 +13,7 @@ module Cpu.Instructions
 
 import Emulator
 import HaskBoy.Mmu
-import Cpu
+import HaskBoy.Cpu
 
 import Debug.Trace (traceM)
 

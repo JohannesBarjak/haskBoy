@@ -5,7 +5,7 @@ module Cpu.Execution where
 import Emulator
 
 import HaskBoy.Mmu
-import Cpu
+import HaskBoy.Cpu
 import Cpu.Instructions
 
 import Control.Lens
