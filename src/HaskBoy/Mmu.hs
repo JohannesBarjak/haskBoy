@@ -128,17 +128,16 @@ readByte idx mem = do
 writeByte :: Address -> Word8 -> Mmu -> Mmu
 writeByte idx v mem = do
     case addrType idx of
-        Bank0  _ -> trace (invalidWriteMessage "Bank0") mem
-        Bank1  _ -> trace (invalidWriteMessage "Bank1") mem
+        Bank0  _ -> mem
+        Bank1  _ -> mem
         VRam   i -> mem&vram.ix i .~ v
         ERam   i -> mem&eram.ix i .~ v
         WRam0  i -> mem&wram0.ix i .~ v
         WRam1  i -> mem&wram1.ix i .~ v
-        EWRam0 _ -> trace (invalidWriteMessage "Echo WRam0") mem
-        EWRam1 _ -> trace (invalidWriteMessage "Echo WRam1") mem
-        OAM    _ -> trace (invalidWriteMessage "OAM") mem
+        EWRam0 _ -> mem
+        EWRam1 _ -> mem
+        OAM    _ -> mem
         NoUse  _ -> mem
         IOReg  i -> mem&ioreg.ix i .~ v
         HRam   i -> mem&hram.ix i .~ v
         Ie       -> mem&ie .~ v
-    where invalidWriteMessage tp = "Invalid write to " ++ tp ++ " Address: " ++ showHex idx ""

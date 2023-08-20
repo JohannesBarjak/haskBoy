@@ -20,10 +20,18 @@ import Data.Word
 import Data.Bits
 
 import Data.Sequence as Seq
+import Test.Hspec.QuickCheck (modifyMaxSuccess)
 
 main :: IO ()
 main = do
-    testToPixelToColor
+    hspec $ do
+        describe "HaskBoy.Mmu" $ do
+            testAddr
+            testAddr16
+        describe "HaskBoy.Ppu" $ do
+            testToPixel
+            testToColor
+
     quickCheck prop_twoCompl
     quickCheck prop_ReadMemAlwaysZero
     quickCheck prop_BLensPutGet
@@ -33,17 +41,40 @@ main = do
     quickCheck prop_StackFunConsistency
     quickCheck prop_RegisterConsistency
 
-testToPixelToColor :: IO ()
-testToPixelToColor = hspec $ do
+testAddr :: Spec
+testAddr = describe "Mmu.addr" $ do
+    context "when writing to rom" . modifyMaxSuccess (const 0x8000) $
+        it "ignores writes" $
+            forAll (choose (0,0x7FFF)) $ \nn v ->
+                evalState ((addr nn .= v) *> use (addr nn)) testMmu == evalState (use (addr nn)) testMmu
+    context "when writing to vram" . modifyMaxSuccess (const 0x2000) $
+        it "saves writes" $
+            forAll (choose (0x8000, 0x9FFF)) $ \nn v ->
+                evalState ((addr nn .= v) *> use (addr nn)) testMmu == v
+
+testAddr16 :: Spec
+testAddr16 = describe "Mmu.addr16" $ do
+    context "when writing to wram" $
+        it "writes bytes in little endian" $
+            evalState littleEndianTestCode testMmu == (0x06, 0xB9)
+
+    where littleEndianTestCode = do
+            addr16 0xFF80 .= 0xB906
+            (,) <$> use (addr 0xFF80) <*> use (addr 0xFF81)
+
+testToPixel :: Spec
+testToPixel =
     describe "Ppu.toPixel" $ do
-        it "Converts a pair of booleans to a pixel" $ do
+        it "converts a pair of booleans to a pixel" $ do
             toPixel False False `shouldBe` I0
             toPixel True  False `shouldBe` I1
             toPixel False True  `shouldBe` I2
             toPixel True  True  `shouldBe` I3
         
+testToColor :: Spec
+testToColor =
     describe "Ppu.toColor" $ do
-        it "Converts from pixel to color" $ do
+        it "converts from pixel to color" $ do
             property $ \pixel ->
                         result 0xE4 pixel == toEnum (fromEnum pixel) &&
                         result 0x1B pixel == toEnum (3 - fromEnum pixel) &&
@@ -56,7 +87,6 @@ testToPixelToColor = hspec $ do
           result palette pixel = flip evalState testMmu $ do
             raw 0xFF47 .= palette
             toColor pixel
-
 
 testEmulator :: Emulator
 testEmulator = Emulator
@@ -113,7 +143,6 @@ prop_RegisterConsistency v = all (v ==) $ evalState testCode testEmulator
             cpu.register.hl .= v
 
             traverse use [cpu.register.af, cpu.register.bc, cpu.register.de, cpu.register.hl]
-
 
 prop_DecBCRegs :: Word8 -> Property
 prop_DecBCRegs x = x > 0 ==> x - 1 == y
