@@ -3,7 +3,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE TemplateHaskell     #-}
 
-module Emulator where
+module HaskBoy.Emulator where
 
 import HaskBoy.Mmu (Mmu(..))
 
@@ -96,4 +96,3 @@ initialPpu = Ppu
     { _display = V.fromList $ replicate (256 * 256) (toPixel False False)
     , _clock   = 0
     }
-

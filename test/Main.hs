@@ -1,7 +1,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 module Main where
 
-import Emulator
+import HaskBoy.Emulator
 import HaskBoy.Mmu
 
 import HaskBoy.Cpu

@@ -12,7 +12,7 @@ import Data.Word (Word8)
 import System.Environment (getArgs)
 import Data.ByteString qualified as BS
 
-import Emulator
+import HaskBoy.Emulator
 
 import HaskBoy.Mmu
 

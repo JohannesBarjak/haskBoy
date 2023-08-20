@@ -2,7 +2,7 @@
 
 module Cpu.Execution where
 
-import Emulator
+import HaskBoy.Emulator
 
 import HaskBoy.Mmu
 import HaskBoy.Cpu
