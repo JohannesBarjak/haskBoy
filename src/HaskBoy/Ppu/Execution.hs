@@ -58,10 +58,14 @@ rowPack tmIndex = mapM (fmap (uncurry tileRow) . tileBytes) [0..7]
 
           si = 0x8000 + fromIntegral tmIndex
 
--- tileRow converts two bytes into a row of pixels
-tileRow :: Word8 -> Word8 -> Vector Pixel
+-- | Get a single tile row from a pair of bytes
+tileRow
+    :: Word8 -- ^ Lower bits
+    -> Word8 -- ^ Upper bits
+    -> Vector Pixel
+
 tileRow v1 v2 = V.fromList $ zipWith toPixel (toBits v1) (toBits v2)
-    -- This function converts a byte into a list of booleans
+
     where toBits :: Word8 -> [Bool]
           toBits v = [toEnum . fromIntegral $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
 

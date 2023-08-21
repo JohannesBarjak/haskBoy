@@ -55,7 +55,7 @@ toPixel
 
 toPixel lb ub = toEnum (fromEnum ub * 2 + fromEnum lb)
 
--- | 'toColor' uses the gameboy's color palette
+-- |  Use the gameboy's color palette
 -- at 0xFF47 to convert a 'Pixel' into a 'Color'
 toColor :: Pixel -> State Mmu Color
 toColor pixel = do
