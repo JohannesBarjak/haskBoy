@@ -1,6 +1,14 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 
-module HaskBoy.Ppu.Execution where
+module HaskBoy.Ppu.Execution
+    ( drawTiles, writeTiles
+    , tiles, tileMaps
+    , rowPack, tileRow
+    , scx, scy
+    , ly, lyc
+    , ppumode, _ppumode
+    , bgTileData
+    ) where
 
 import HaskBoy.Emulator
 
