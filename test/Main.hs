@@ -8,6 +8,7 @@ import HaskBoy.Cpu
 import Cpu.Instructions
 
 import HaskBoy.Ppu
+import HaskBoy.Ppu.Execution
 
 import Test.Hspec
 import Test.QuickCheck
@@ -33,6 +34,8 @@ main = do
         describe "HaskBoy.Ppu" $ do
             testToPixel
             testToColor
+        describe "HaskBoy.Ppu.Execution" $ do
+            testTileRow
 
     quickCheck prop_DecBCRegs
     quickCheck prop_StackFunConsistency
@@ -88,24 +91,31 @@ testRegisters :: Spec
 testRegisters = do
     describe "16bit registers" $
         it "writes a value to 16bit registers and checks write integrity" $
-            property $ \v -> all (v ==) (evalState (write16BitRegisters v) testCpu)
+            property $ \v -> all (v ==) (evalState (writeToRegisters v wrs) testCpu)
     describe "8bit registers" $
         it "writes a value to 8bit registers and checks write integrity" $
-            property $ \v -> all (v ==) (evalState (write8BitRegisters v) testCpu)
+            property $ \v -> all (v ==) (evalState (writeToRegisters v brs) testCpu)
 
-    where write16BitRegisters :: Word16 -> State Cpu [Word16]
-          write16BitRegisters v = do
-            for_ [af, bc, de, hl, pc, sp] $ \r -> do
-                register.r .= v
-
-            traverse (use . (register.)) [af, bc, de, hl, pc, sp]
-
-          write8BitRegisters :: Word8 -> State Cpu [Word8]
-          write8BitRegisters v = do
-            for_ [a, flag, b, c, d, e, h, l] $ \r -> do
+    where writeToRegisters :: a -> [ALens' Register a] -> State Cpu [a]
+          writeToRegisters v rs = do
+            for_ (map cloneLens rs) $ \r -> do
                 register.r .= v
             
-            traverse (use . (register.)) [a, flag, b, c, d, e, h, l]
+            traverse (use . (register.) . cloneLens) rs
+
+          wrs :: [ALens' Register Word16]
+          wrs = [af, bc, de, hl, pc, sp]
+          brs :: [ALens' Register Word8]
+          brs = [a, flag, b, c, d, e, h, l]
+
+testTileRow :: Spec
+testTileRow =
+    describe "tileRow" $ do
+        it "always returns even enums when the first byte is zero" $
+            property $ \v -> all (even . fromEnum) (tileRow 0 v)
+
+        it "always returns odd enums when the first byte is 0xFF" $
+            property $ \v -> all (odd . fromEnum) (tileRow 0xFF v)
 
 testEmulator :: Emulator
 testEmulator = Emulator
