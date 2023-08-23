@@ -103,9 +103,7 @@ testRegisters = do
             
             traverse (use . (register.) . cloneLens) rs
 
-          wrs :: [ALens' Register Word16]
           wrs = [af, bc, de, hl, pc, sp]
-          brs :: [ALens' Register Word8]
           brs = [a, flag, b, c, d, e, h, l]
 
 testTileRow :: Spec
