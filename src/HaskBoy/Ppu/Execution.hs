@@ -55,13 +55,14 @@ tiles = mapM rowPack =<< tileMaps
 tileMaps :: State Mmu [Word8]
 tileMaps = sequence [use (addr (0x9800 + (y * 32) + x)) | y <- [0..31], x <- [0..31]]
 
+-- | Get a tile using an index, which should come from one of the Gameboy's tilemaps
 rowPack :: Word8 -> State Mmu [Vector Pixel]
-rowPack tmIndex = mapM (fmap (uncurry tileRow) . tileBytes) [0..7]
+rowPack tmIndex = mapM (fmap (uncurry tileRow) . tileBytes . (*2)) [0..7]
 
-    where tileBytes :: Word8 -> State Mmu (Word8, Word8)
+    where tileBytes :: Address -> State Mmu (Word8, Word8)
           tileBytes i = do
-            fstBits <- use (addr (si + fromIntegral (i * 2)))
-            sndBits <- use (addr (si + fromIntegral (i * 2) + 1))
+            fstBits <- use (addr (si + i))
+            sndBits <- use (addr (si + i + 1))
             pure (fstBits, sndBits)
 
           si = 0x8000 + fromIntegral tmIndex
