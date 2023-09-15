@@ -19,7 +19,7 @@ import Control.Monad.State.Strict
 import Data.Vector qualified as V
 import Data.Word
 
-import Data.Sequence as Seq
+import Data.Sequence qualified as Seq
 import Test.Hspec.QuickCheck (modifyMaxSuccess)
 import Data.Foldable (for_)
 
@@ -36,6 +36,7 @@ main = do
             testToColor
         describe "HaskBoy.Ppu.Execution" $ do
             testTileRow
+            testGetTile
 
     quickCheck prop_DecBCRegs
     quickCheck prop_StackFunConsistency
@@ -114,6 +115,14 @@ testTileRow =
 
         it "always returns odd enums when the first byte is 0xFF" $
             property $ \v -> all (odd . fromEnum) (tileRow 0xFF v)
+
+testGetTile :: Spec
+testGetTile =
+    describe "getTile" $ do
+        it "always returns an 8x8 tile" $
+            property $ \v -> flip evalState testMmu $ do
+                tile <- getTile v
+                pure (length tile == 8 && all ((== 8) . V.length) tile)
 
 testEmulator :: Emulator
 testEmulator = Emulator
