@@ -53,7 +53,7 @@ tiles :: State Mmu [[Vector Pixel]]
 tiles = mapM getTile =<< tileMaps
 
 tileMaps :: State Mmu [Word8]
-tileMaps = sequence [use (addr (0x9800 + (y * 32) + x)) | y <- [0..31], x <- [0..31]]
+tileMaps = sequence [use (addr (0x9800 + i)) | i <- [0..1023]]
 
 -- | Get a tile using an index, which should come from one of the Gameboy's tilemaps
 getTile :: Word8 -> State Mmu [Vector Pixel]
