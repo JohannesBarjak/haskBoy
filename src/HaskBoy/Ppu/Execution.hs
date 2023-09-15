@@ -3,7 +3,7 @@
 module HaskBoy.Ppu.Execution
     ( drawTiles, writeTiles
     , tiles, tileMaps
-    , rowPack, tileRow
+    , getTile, tileRow
     , scx, scy
     , ly, lyc
     , ppumode, _ppumode
@@ -50,14 +50,14 @@ writeTiles ts dp = runST $ do
     V.freeze mdp
 
 tiles :: State Mmu [[Vector Pixel]]
-tiles = mapM rowPack =<< tileMaps
+tiles = mapM getTile =<< tileMaps
 
 tileMaps :: State Mmu [Word8]
 tileMaps = sequence [use (addr (0x9800 + (y * 32) + x)) | y <- [0..31], x <- [0..31]]
 
 -- | Get a tile using an index, which should come from one of the Gameboy's tilemaps
-rowPack :: Word8 -> State Mmu [Vector Pixel]
-rowPack tmIndex = mapM (fmap (uncurry tileRow) . tileBytes . (*2)) [0..7]
+getTile :: Word8 -> State Mmu [Vector Pixel]
+getTile tmIndex = mapM (fmap (uncurry tileRow) . tileBytes . (*2)) [0..7]
 
     where tileBytes :: Address -> State Mmu (Word8, Word8)
           tileBytes i = do
