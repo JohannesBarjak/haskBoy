@@ -30,7 +30,7 @@ import Data.Foldable (for_)
 import Control.Monad.ST
 import Data.Vector.Mutable qualified as VM
 
-type Tile = [Vector Pixel]
+type Tile = Vector (Vector Pixel)
 
 drawTiles :: State Emulator ()
 drawTiles = do
@@ -49,7 +49,7 @@ writeTiles rows dp = runST $ do
 
 writeTile :: VM.PrimMonad m => VM.MVector (VM.PrimState m) Pixel -> (Int, Int) -> Tile -> m ()
 writeTile mdp (x,y) tile = do
-    for_ (zip [0..] tile) $ \(j, row) -> do
+    for_ (V.indexed tile) $ \(j, row) -> do
         for_ (V.indexed row) $ \(i, pixel) -> do
             VM.write mdp (dpIndex (x + i) (y + j)) pixel
     where dpIndex i j = (j * 256) + i
@@ -67,7 +67,7 @@ tileMaps = traverse sequence $ do
 
 -- | Get a tile using an index, which should come from one of the Gameboy's tilemaps
 getTile :: Word8 -> State Mmu Tile
-getTile tmIndex = mapM (fmap (uncurry tileRow) . tileBytes . (*2)) [0..7]
+getTile tmIndex = mapM (fmap (uncurry tileRow) . tileBytes . (*2)) $ V.fromList [0..7]
 
     where tileBytes :: Address -> State Mmu (Word8, Word8)
           tileBytes i = do
