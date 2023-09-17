@@ -39,7 +39,7 @@ drawTiles = do
 
     ppu.display .= writeTiles t dp
 
-writeTiles :: [[Tile]] -> Vector Pixel -> Vector Pixel
+writeTiles :: [[Tile]] -> Display -> Display
 writeTiles rows dp = runST $ do
     mdp <- V.thaw dp
     for_ (zip [0..] rows) $ \(y, row) -> do

@@ -4,6 +4,7 @@ module HaskBoy.Ppu
     ( Ppu(..)
     , Pixel(..)
     , Color(..)
+    , Display
     , toPixel, toColor
     , display, clock
     ) where
@@ -17,8 +18,10 @@ import Control.Monad.State.Strict (State)
 import Data.Vector (Vector)
 import Data.Bits (Bits((.&.), shiftR))
 
+type Display = Vector Pixel
+
 data Ppu = Ppu
-    { _display :: Vector Pixel -- ^ Gameboy's 256x256 logical display
+    { _display :: Display -- ^ Gameboy's 256x256 logical display
     , _clock   :: Integer
     }
 
