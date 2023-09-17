@@ -30,6 +30,8 @@ import Data.Foldable (for_)
 import Control.Monad.ST
 import Data.Vector.Mutable qualified as VM
 
+type Tile = [Vector Pixel]
+
 drawTiles :: State Emulator ()
 drawTiles = do
     t <- zoom mmu tiles
@@ -37,26 +39,34 @@ drawTiles = do
 
     ppu.display .= writeTiles t dp
 
-writeTiles :: [[Vector Pixel]] -> Vector Pixel -> Vector Pixel
-writeTiles ts dp = runST $ do
+writeTiles :: [[Tile]] -> Vector Pixel -> Vector Pixel
+writeTiles rows dp = runST $ do
     mdp <- V.thaw dp
-    for_ (zip [0..] ts) $ \(k, tl) -> do
-        let x = (k `rem` 32) * 8
-        let y = (k `quot` 32) * 8
-
-        for_ (zip [0..] tl) $ \(i, row) -> do
-            for_ (V.indexed row) $ \(j, v) -> do
-                VM.write mdp (((y + i) * 32) + (x + j)) v
+    for_ (zip [0..] rows) $ \(y, row) -> do
+        for_ (zip [0..] row) $ \(x, tile) -> do
+            writeTile mdp (x * 8,y) tile
     V.freeze mdp
 
-tiles :: State Mmu [[Vector Pixel]]
-tiles = mapM getTile =<< tileMaps
+writeTile :: VM.PrimMonad m => VM.MVector (VM.PrimState m) Pixel -> (Int, Int) -> Tile -> m ()
+writeTile mdp (x,y) tile = do
+    for_ (zip [0..] tile) $ \(j, row) -> do
+        for_ (V.indexed row) $ \(i, pixel) -> do
+            VM.write mdp (dpIndex (x + i) (y + j)) pixel
+    where dpIndex i j = (j * 256) + i
 
-tileMaps :: State Mmu [Word8]
-tileMaps = sequence [use (addr (0x9800 + i)) | i <- [0..1023]]
+tiles :: State Mmu [[Tile]]
+tiles = traverse (traverse getTile) =<< tileMaps
+
+tileMaps :: State Mmu [[Word8]]
+tileMaps = traverse sequence $ do
+    y <- [0..31]
+
+    pure $ do
+        x <- [0..31]
+        pure $ use (addr (0x9800 + (y * 32) + x))
 
 -- | Get a tile using an index, which should come from one of the Gameboy's tilemaps
-getTile :: Word8 -> State Mmu [Vector Pixel]
+getTile :: Word8 -> State Mmu Tile
 getTile tmIndex = mapM (fmap (uncurry tileRow) . tileBytes . (*2)) [0..7]
 
     where tileBytes :: Address -> State Mmu (Word8, Word8)
