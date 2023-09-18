@@ -11,6 +11,7 @@ module HaskBoy.Cpu
     , zero, subOp, hcarry, carry
     , Cpu(..)
     , register
+    , interruptEnable
     , tclock
     , twoCompl
     ) where
@@ -22,8 +23,9 @@ import Data.Bits (Bits(shiftL, shiftR, complement), (.|.), (.&.))
 import Foreign.Marshal (toBool)
 
 data Cpu = Cpu
-    { _register :: Register
-    , _tclock   :: Integer -- ^ The Cpu clock uses tcycles
+    { _register        :: Register
+    , _interruptEnable :: Bool
+    , _tclock          :: Integer -- ^ The Cpu clock uses tcycles
     }
 
 -- | Store 16bit registers

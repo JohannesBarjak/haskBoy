@@ -391,6 +391,10 @@ execute = \case
             add =<< use (mmu.addr nn)
             cpu.tclock += 8
 
+        0xF3 -> do
+            cpu.interruptEnable .= False
+            cpu.tclock += 4
+
         0xFE -> do
             cmp =<< consumeByte
             cpu.tclock += 8
