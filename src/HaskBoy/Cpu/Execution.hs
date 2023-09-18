@@ -403,6 +403,10 @@ execute = \case
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
+toInstruction :: Word8 -> Instruction
+toInstruction = \case
+        0x00 -> Nop
+
 extractOctalArg :: (Bits a, Num a) => Int -> a -> a
 extractOctalArg i v = shiftR v i .&. 7
 
