@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 
-module Cpu.Instructions
+module HaskBoy.Cpu.Instructions
     ( inc, dec
     , xorA
     , jr, call, ret

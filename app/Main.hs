@@ -17,8 +17,8 @@ import HaskBoy.Emulator
 import HaskBoy.Mmu
 
 import HaskBoy.Cpu
-import Cpu.Instructions
-import Cpu.Execution
+import HaskBoy.Cpu.Instructions
+import HaskBoy.Cpu.Execution
 
 import HaskBoy.Ppu
 import HaskBoy.Ppu.Execution

@@ -1,12 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Cpu.Execution where
+module HaskBoy.Cpu.Execution where
 
 import HaskBoy.Emulator
 
 import HaskBoy.Mmu
 import HaskBoy.Cpu
-import Cpu.Instructions
+import HaskBoy.Cpu.Instructions
 
 import Control.Lens
 import Control.Monad.State.Strict
