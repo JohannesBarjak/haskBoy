@@ -17,6 +17,8 @@ import Data.Bits (Bits((.&.), shiftR))
 import Debug.Trace (trace, traceM)
 import Numeric (showHex)
 
+data Instruction = Nop
+
 execute :: Word8 -> State Emulator ()
 execute = \case
         0x00 -> cpu.tclock += 4
