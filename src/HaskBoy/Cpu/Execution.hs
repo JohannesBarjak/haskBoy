@@ -17,16 +17,14 @@ import Data.Bits (Bits((.&.), shiftR))
 import Debug.Trace (trace, traceM)
 import Numeric (showHex)
 
-data Instruction = Nop
+data Instruction
+    = Nop
+    | XorA (ALens' Emulator Word8)
+    | Ld (ALens' Emulator Word8)
+    | Move (ALens' Emulator Word8) (ALens' Emulator Word8)
 
 execute :: Word8 -> State Emulator ()
 execute = \case
-        0x00 -> cpu.tclock += 4
-
-        0xAF -> do
-            xorA =<< use (cpu.register.a)
-            cpu.tclock += 4
-
         0x0A -> do
             nn <- use (cpu.register.bc)
             cpu.register.a <~ use (mmu.addr nn)
@@ -54,47 +52,6 @@ execute = \case
             cpu.register.hl -= 1
 
             cpu.tclock += 8
-
-        i | i .&. 0xC7 == 0x06 -> do
-            v <- consumeByte
-            cpu.tclock += 8
-
-            case extractOctalArg 3 i of
-                0 -> cpu.register.b .= v
-                1 -> cpu.register.c .= v
-                2 -> cpu.register.d .= v
-                3 -> cpu.register.e .= v
-                4 -> cpu.register.h .= v
-                5 -> cpu.register.l .= v
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    mmu.addr nn .= v
-
-                    cpu.tclock += 4
-
-                7 -> cpu.register.a .= v
-                _ -> error "`Impossible` error on assign byte to register"
-
-        i | i .&. 0xF8 == 0x40 -> do
-            cpu.tclock += 4
-            cpu.register.b <~ case extractOctalArg 0 i of
-                0 -> use (cpu.register.b)
-                1 -> use (cpu.register.c)
-                2 -> use (cpu.register.d)
-                3 -> use (cpu.register.e)
-                4 -> use (cpu.register.h)
-                5 -> use (cpu.register.l)
-
-                6 -> do
-                    cpu.tclock += 4
-
-                    nn <- use (cpu.register.hl)
-                    use (mmu.addr nn)
-
-                7 -> use (cpu.register.a)
-                _ -> error "`Impossible` error"
-
 
         0x49 -> cpu.tclock += 4
 
@@ -403,9 +360,73 @@ execute = \case
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
-toInstruction :: Word8 -> Instruction
+execute' :: Instruction -> State Emulator ()
+execute' = \case
+        Nop  -> pure ()
+
+        Ld r -> do
+            v <- consumeByte
+            cloneLens r .= v
+        
+        XorA r -> xorA =<< use (cloneLens r)
+
+        (Move rr lr) -> cloneLens rr <~ use (cloneLens lr)
+
+toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
-        0x00 -> Nop
+        0x00 -> do
+            cpu.tclock += 4
+            pure Nop
+
+        i | i .&. 0xF8 == 0xA8 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (XorA r)
+
+        i | i .&. 0xC7 == 0x06 -> do
+            cpu.tclock += 8
+
+            r <- argToRegister (extractOctalArg 3 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Ld r)
+
+        i | i .&. 0xF8 == 0x40 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+            
+            pure (Move (cpu.register.b) r)
+
+        instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
+
+argToRegister :: Word8 -> State Emulator (Either (ALens' Mmu Word8) (ALens' Register Word8))
+argToRegister 0 = pure $ Right b
+argToRegister 1 = pure $ Right c
+argToRegister 2 = pure $ Right d
+argToRegister 3 = pure $ Right e
+argToRegister 4 = pure $ Right h
+argToRegister 5 = pure $ Right l
+
+argToRegister 6 = do
+    nn <- use (cpu.register.hl)
+    pure $ Left (addr nn)
+
+argToRegister 7 = pure $ Right a
+argToRegister _ = undefined
 
 extractOctalArg :: (Bits a, Num a) => Int -> a -> a
 extractOctalArg i v = shiftR v i .&. 7
