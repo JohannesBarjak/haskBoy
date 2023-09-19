@@ -10,15 +10,9 @@ module HaskBoy.Mmu
 
 import Control.Lens
 
-import Control.Monad.State.Strict
-
-import Data.Vector (Vector)
 import Data.Sequence
 import Data.Word (Word8, Word16)
 import Data.Bits
-
-import Debug.Trace (trace)
-import Numeric (showHex)
 
 import Data.Ix (Ix(inRange))
 
