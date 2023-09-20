@@ -22,6 +22,9 @@ data Instruction
     | XorA (ALens' Emulator Word8)
     | Ld (ALens' Emulator Word8)
     | Move (ALens' Emulator Word8) (ALens' Emulator Word8)
+    | Inc (ALens' Emulator Word8)
+    | Dec (ALens' Emulator Word8)
+    | Sub (ALens' Emulator Word8)
 
 execute :: Word8 -> State Emulator ()
 execute = \case
@@ -192,66 +195,6 @@ execute = \case
 
             cpu.tclock += 8
 
-        i | i .&. 0xC7 == 0x04 -> do
-            cpu.tclock += 4
-
-            case extractOctalArg 3 i of
-                0 -> inc (cpu.register.b)
-                1 -> inc (cpu.register.c)
-                2 -> inc (cpu.register.d)
-                3 -> inc (cpu.register.e)
-                4 -> inc (cpu.register.h)
-                5 -> inc (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    inc (mmu.addr nn)
-
-                    cpu.tclock += 8
-
-                7 -> inc (cpu.register.a)
-                _ -> error "`Impossible` error"
-
-        i | i .&. 0xC7 == 0x05 -> do
-            cpu.tclock += 4
-
-            case extractOctalArg 3 i of
-                0 -> dec (cpu.register.b)
-                1 -> dec (cpu.register.c)
-                2 -> dec (cpu.register.d)
-                3 -> dec (cpu.register.e)
-                4 -> dec (cpu.register.h)
-                5 -> dec (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    dec (mmu.addr nn)
-
-                    cpu.tclock += 8
-
-                7 -> dec (cpu.register.a)
-                _ -> error "`Impossible` error with a dec instruction"
-            
-        i | i .&. 0xF8 == 0x90 -> do
-            cpu.tclock += 4
-
-            case extractOctalArg 0 i of
-                0 -> sub =<< use (cpu.register.b)
-                1 -> sub =<< use (cpu.register.c)
-                2 -> sub =<< use (cpu.register.d)
-                3 -> sub =<< use (cpu.register.e)
-                4 -> sub =<< use (cpu.register.h)
-                5 -> sub =<< use (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    sub =<< use (mmu.addr nn)
-
-                    cpu.tclock += 4
-
-                7 -> sub =<< use (cpu.register.a)
-                _ -> error "`Impossible` error"
-
         i | i .&. 0xF8 == 0x98 -> do
             cpu.tclock += 4
 
@@ -312,13 +255,51 @@ execute' = \case
         
         XorA r -> xorA =<< use (cloneLens r)
 
-        (Move rr lr) -> cloneLens rr <~ use (cloneLens lr)
+        Move rr lr -> cloneLens rr <~ use (cloneLens lr)
+
+        Inc r -> inc (cloneLens r)
+        Dec r -> dec (cloneLens r)
+
+        Sub r -> sub =<< use (cloneLens r)
 
 toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
         0x00 -> do
             cpu.tclock += 4
             pure Nop
+
+        i | i .&. 0xC7 == 0x04 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 3 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 8
+                    pure (mmu.r)
+
+            pure (Dec r)
+
+        i | i .&. 0xC7 == 0x05 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 3 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 8
+                    pure (mmu.r)
+
+            pure (Dec r)
+
+        i | i .&. 0xF8 == 0x90 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Sub r)
 
         i | i .&. 0xF8 == 0xA8 -> do
             cpu.tclock += 4
