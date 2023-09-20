@@ -21,6 +21,8 @@ data Instruction
     = Nop
     | XorA (ALens' Emulator Word8)
     | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
+    | AHLI | HLIA
+    | AHLD | HLDA
     | Store (ALens' Emulator Word8)
     | Inc (ALens' Emulator Word8)
     | Dec (ALens' Emulator Word8)
@@ -29,74 +31,6 @@ data Instruction
 
 execute :: Word8 -> State Emulator ()
 execute = \case
-        0x0A -> do
-            nn <- use (cpu.register.bc)
-            cpu.register.a <~ use (mmu.addr nn)
-
-            cpu.tclock += 8
-
-        0x1A -> do
-            nn <- use (cpu.register.de)
-            cpu.register.a <~ use (mmu.addr nn)
-
-            cpu.tclock += 8
-
-        0x2A -> do
-            nn <- use (cpu.register.hl)
-
-            cpu.register.a <~ use (mmu.addr nn)
-            cpu.register.hl += 1
-
-            cpu.tclock += 8
-
-        0x3A -> do
-            nn <- use (cpu.register.hl)
-
-            cpu.register.a <~ use (mmu.addr nn)
-            cpu.register.hl -= 1
-
-            cpu.tclock += 8
-
-        0x49 -> cpu.tclock += 4
-
-        0x4F -> zoom cpu $ do
-            register.c <~ use (register.a)
-            tclock += 4
-
-        0x02 -> do
-            nn <- use (cpu.register.bc)
-            v  <- use (cpu.register.a)
-
-            mmu.addr nn .= v
-
-            cpu.tclock += 8
-
-        0x12 -> do
-            nn <- use (cpu.register.de)
-            v  <- use (cpu.register.a)
-
-            mmu.addr nn .= v
-
-            cpu.tclock += 8
-
-        0x22 -> do
-            nn <- use (cpu.register.hl)
-            v  <- use (cpu.register.a)
-
-            mmu.addr nn .= v
-
-            cpu.register.hl += 1
-            cpu.tclock += 8
-
-        0x32 -> do
-            nn <- use (cpu.register.hl)
-            v  <- use (cpu.register.a)
-
-            mmu.addr nn .= v
-
-            cpu.register.hl -= 1
-            cpu.tclock += 8
-
         0x03 -> zoom cpu $ do
             register.bc += 1
             tclock += 8
@@ -235,7 +169,7 @@ execute' = \case
         Store r -> do
             v <- consumeByte
             cloneLens r .= v
-        
+
         XorA r -> xorA =<< use (cloneLens r)
 
         Inc r -> inc (cloneLens r)
@@ -243,6 +177,30 @@ execute' = \case
 
         Sub r -> sub =<< use (cloneLens r)
         Sbc r -> sbc =<< use (cloneLens r)
+
+        AHLI -> do
+            nn <- use (cpu.register.hl)
+            cpu.register.a <~ use (mmu.addr nn)
+
+            cpu.register.hl += 1
+
+        AHLD -> do
+            nn <- use (cpu.register.hl)
+            cpu.register.a <~ use (mmu.addr nn)
+
+            cpu.register.hl -= 1
+
+        HLIA -> do
+            nn <- use (cpu.register.hl)
+            mmu.addr nn <~ use (cpu.register.a)
+
+            cpu.register.hl += 1
+
+        HLDA -> do
+            nn <- use (cpu.register.hl)
+            mmu.addr nn <~ use (cpu.register.a)
+
+            cpu.register.hl -= 1
 
 toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
@@ -327,6 +285,17 @@ toInstruction = \case
             
             pure (Ld (cpu.register.b) r)
 
+        i | i .&. 0xF8 == 0x48 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Ld (cpu.register.c) r)
+
         i | i .&. 0xF8 == 0x50 -> do
             cpu.tclock += 4
 
@@ -359,6 +328,46 @@ toInstruction = \case
                     pure (mmu.r)
             
             pure (Ld (cpu.register.a) r)
+
+        0x02 -> do
+            cpu.tclock += 8
+
+            nn <- use (cpu.register.bc)
+            pure (Ld (mmu.addr nn) (cpu.register.a))
+
+        0x12 -> do
+            cpu.tclock += 8
+
+            nn <- use (cpu.register.de)
+            pure (Ld (mmu.addr nn) (cpu.register.a))
+
+        0x22 -> do
+            cpu.tclock += 8
+            pure HLIA
+
+        0x32 -> do
+            cpu.tclock += 8
+            pure HLDA
+
+        0x0A -> do
+            cpu.tclock += 8
+
+            nn <- use (cpu.register.bc)
+            pure (Ld (cpu.register.a) (mmu.addr nn))
+
+        0x1A -> do
+            cpu.tclock += 8
+
+            nn <- use (cpu.register.de)
+            pure (Ld (cpu.register.a) (mmu.addr nn))
+
+        0x2A -> do
+            cpu.tclock += 8
+            pure AHLI
+
+        0x3A -> do
+            cpu.tclock += 8
+            pure AHLD
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
