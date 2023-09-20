@@ -252,26 +252,6 @@ execute = \case
                 7 -> sub =<< use (cpu.register.a)
                 _ -> error "`Impossible` error"
 
-        i | i .&. 0xF8 == 0x78 -> do
-            cpu.tclock += 4
-
-            case extractOctalArg 0 i of
-                0 -> cpu.register.a <~ use (cpu.register.b)
-                1 -> cpu.register.a <~ use (cpu.register.c)
-                2 -> cpu.register.a <~ use (cpu.register.d)
-                3 -> cpu.register.a <~ use (cpu.register.e)
-                4 -> cpu.register.a <~ use (cpu.register.h)
-                5 -> cpu.register.a <~ use (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    cpu.register.a <~ use (mmu.addr nn)
-
-                    cpu.tclock += 4
-
-                7 -> cpu.register.a <~ use (cpu.register.a)
-                _ -> error "`Impossible` error"
-            
         i | i .&. 0xF8 == 0x98 -> do
             cpu.tclock += 4
 
@@ -291,44 +271,6 @@ execute = \case
 
                 7 -> use (cpu.register.a)
                 _ -> error "`Impossible` error"
-
-        i | i .&. 0xF8 == 0x50 -> do
-            cpu.tclock += 4
-
-            case extractOctalArg 0 i of
-                0 -> cpu.register.d <~ use (cpu.register.b)
-                1 -> cpu.register.d <~ use (cpu.register.c)
-                2 -> cpu.register.d <~ use (cpu.register.d)
-                3 -> cpu.register.d <~ use (cpu.register.e)
-                4 -> cpu.register.d <~ use (cpu.register.h)
-                5 -> cpu.register.d <~ use (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    cpu.register.d <~ use (mmu.addr nn)
-
-                    cpu.tclock += 4
-
-                7 -> cpu.register.d <~ use (cpu.register.a)
-                _ -> error "`impossible` error"
-
-        i | i .&. 0xF8 == 0x60 -> do
-            case extractOctalArg 0 i of
-                0 -> cpu.register.h <~ use (cpu.register.b)
-                1 -> cpu.register.h <~ use (cpu.register.c)
-                2 -> cpu.register.h <~ use (cpu.register.d)
-                3 -> cpu.register.h <~ use (cpu.register.e)
-                4 -> cpu.register.h <~ use (cpu.register.h)
-                5 -> cpu.register.h <~ use (cpu.register.l)
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    cpu.register.h <~ use (mmu.addr nn)
-                7 -> cpu.register.h <~ use (cpu.register.a)
-                _ -> error "`impossible` error"
-
-            case extractOctalArg 0 i of
-                6 -> cpu.tclock += 8
-                _ -> cpu.tclock += 4
 
         0xEA -> do
             nn <- consumeWord
@@ -410,6 +352,39 @@ toInstruction = \case
                     pure (mmu.r)
             
             pure (Move (cpu.register.b) r)
+
+        i | i .&. 0xF8 == 0x50 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+            
+            pure (Move (cpu.register.d) r)
+
+        i | i .&. 0xF8 == 0x60 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+            
+            pure (Move (cpu.register.h) r)
+
+        i | i .&. 0xF8 == 0x78 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+            
+            pure (Move (cpu.register.a) r)
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
