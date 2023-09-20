@@ -20,8 +20,8 @@ import Numeric (showHex)
 data Instruction
     = Nop
     | XorA (ALens' Emulator Word8)
-    | Ld (ALens' Emulator Word8)
-    | Move (ALens' Emulator Word8) (ALens' Emulator Word8)
+    | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
+    | Store (ALens' Emulator Word8)
     | Inc (ALens' Emulator Word8)
     | Dec (ALens' Emulator Word8)
     | Sub (ALens' Emulator Word8)
@@ -230,13 +230,13 @@ execute' :: Instruction -> State Emulator ()
 execute' = \case
         Nop  -> pure ()
 
-        Ld r -> do
+        Ld rr lr -> cloneLens rr <~ use (cloneLens lr)
+
+        Store r -> do
             v <- consumeByte
             cloneLens r .= v
         
         XorA r -> xorA =<< use (cloneLens r)
-
-        Move rr lr -> cloneLens rr <~ use (cloneLens lr)
 
         Inc r -> inc (cloneLens r)
         Dec r -> dec (cloneLens r)
@@ -314,7 +314,7 @@ toInstruction = \case
                     cpu.tclock += 4
                     pure (mmu.r)
 
-            pure (Ld r)
+            pure (Store r)
 
         i | i .&. 0xF8 == 0x40 -> do
             cpu.tclock += 4
@@ -325,7 +325,7 @@ toInstruction = \case
                     cpu.tclock += 4
                     pure (mmu.r)
             
-            pure (Move (cpu.register.b) r)
+            pure (Ld (cpu.register.b) r)
 
         i | i .&. 0xF8 == 0x50 -> do
             cpu.tclock += 4
@@ -336,7 +336,7 @@ toInstruction = \case
                     cpu.tclock += 4
                     pure (mmu.r)
             
-            pure (Move (cpu.register.d) r)
+            pure (Ld (cpu.register.d) r)
 
         i | i .&. 0xF8 == 0x60 -> do
             cpu.tclock += 4
@@ -347,7 +347,7 @@ toInstruction = \case
                     cpu.tclock += 4
                     pure (mmu.r)
             
-            pure (Move (cpu.register.h) r)
+            pure (Ld (cpu.register.h) r)
 
         i | i .&. 0xF8 == 0x78 -> do
             cpu.tclock += 4
@@ -358,7 +358,7 @@ toInstruction = \case
                     cpu.tclock += 4
                     pure (mmu.r)
             
-            pure (Move (cpu.register.a) r)
+            pure (Ld (cpu.register.a) r)
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
