@@ -11,10 +11,10 @@ import HaskBoy.Cpu.Instructions
 import Control.Lens
 import Control.Monad.State.Strict
 
-import Data.Word (Word8)
+import Data.Word (Word8, Word16)
 import Data.Bits (Bits((.&.), shiftR))
 
-import Debug.Trace (trace, traceM)
+import Debug.Trace (traceM)
 import Numeric (showHex)
 
 data Instruction
@@ -25,25 +25,14 @@ data Instruction
     | AHLD | HLDA
     | Store (ALens' Emulator Word8)
     | Inc (ALens' Emulator Word8)
+    | Inc16 (ALens' Register Word16)
     | Dec (ALens' Emulator Word8)
     | Sub (ALens' Emulator Word8)
     | Sbc (ALens' Emulator Word8)
+    | Ret
 
 execute :: Word8 -> State Emulator ()
 execute = \case
-        0x03 -> zoom cpu $ do
-            register.bc += 1
-            tclock += 8
-        0x13 -> zoom cpu $ do
-            register.de += 1
-            tclock += 8
-        0x23 -> zoom cpu $ do
-            register.hl += 1
-            tclock += 8
-        0x33 -> zoom cpu $ do
-            register.sp += 1
-            tclock += 8
-
         0x77 -> do
             nn <- use (cpu.register.hl)
             v  <- use (cpu.register.a)
@@ -75,7 +64,7 @@ execute = \case
             arg  -> error $ "Invalid CB argument: " ++ showHex arg ""
 
         0xC1 -> do
-            cpu.register.bc <~ (\x -> trace ("pop stack: 0x" ++ showHex x "") x) <$> popStack
+            cpu.register.bc <~ popStack
             cpu.tclock += 12
 
         0xD1 -> do
@@ -202,11 +191,37 @@ execute' = \case
 
             cpu.register.hl -= 1
 
+        Inc16 r -> cpu.register.cloneLens r += 1
+
+        Ret -> ret
+
 toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
         0x00 -> do
             cpu.tclock += 4
             pure Nop
+
+        0x02 -> do
+            cpu.tclock += 8
+
+            nn <- use (cpu.register.bc)
+            pure (Ld (mmu.addr nn) (cpu.register.a))
+
+        0x03 -> do
+            cpu.tclock += 8
+            pure (Inc16 bc)
+
+        0x13 -> do
+            cpu.tclock += 8
+            pure (Inc16 de)
+
+        0x23 -> do
+            cpu.tclock += 8
+            pure (Inc16 hl)
+
+        0x33 -> do
+            cpu.tclock += 8
+            pure (Inc16 sp)
 
         i | i .&. 0xC7 == 0x04 -> do
             cpu.tclock += 4
@@ -329,12 +344,6 @@ toInstruction = \case
             
             pure (Ld (cpu.register.a) r)
 
-        0x02 -> do
-            cpu.tclock += 8
-
-            nn <- use (cpu.register.bc)
-            pure (Ld (mmu.addr nn) (cpu.register.a))
-
         0x12 -> do
             cpu.tclock += 8
 
@@ -368,6 +377,10 @@ toInstruction = \case
         0x3A -> do
             cpu.tclock += 8
             pure AHLD
+
+        0xC9 -> do
+            cpu.tclock += 16
+            pure Ret
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
