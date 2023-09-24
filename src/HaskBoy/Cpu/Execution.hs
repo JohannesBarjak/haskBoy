@@ -30,6 +30,7 @@ data Instruction
     | Add (ALens' Emulator Word8)
     | Sub (ALens' Emulator Word8)
     | Sbc (ALens' Emulator Word8)
+    | Jr Bool
     | Ret
 
 execute :: Word8 -> State Emulator ()
@@ -83,10 +84,6 @@ execute = \case
         0x17 -> do
             rl a
             cpu.tclock += 4
-
-        0x18 -> jr True
-        0x20 -> jr . not =<< use (cpu.register.zero)
-        0x28 -> jr =<< use (cpu.register.zero)
 
         0x01 -> do
             cpu.register.bc <~ consumeWord
@@ -178,6 +175,8 @@ execute' = \case
             cpu.register.hl -= 1
 
         Inc16 r -> cpu.register.cloneLens r += 1
+
+        Jr v -> jr v
 
         Ret -> ret
 
@@ -374,6 +373,10 @@ toInstruction = \case
                     pure (mmu.r)
 
             pure (Add r)
+
+        0x18 -> pure (Jr True)
+        0x20 -> Jr . not <$> use (cpu.register.zero)
+        0x28 -> Jr <$> use (cpu.register.zero)
 
         0xC9 -> do
             cpu.tclock += 16
