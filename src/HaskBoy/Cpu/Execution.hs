@@ -19,7 +19,7 @@ import Numeric (showHex)
 
 data Instruction
     = Nop
-    | XorA (ALens' Emulator Word8)
+    | Xor (ALens' Emulator Word8)
     | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
     | AHLI | HLIA
     | AHLD | HLDA
@@ -140,7 +140,7 @@ execute' = \case
 
         Store r v -> cloneLens r .= v
 
-        XorA r -> xorA =<< use (cloneLens r)
+        Xor r -> xor =<< use (cloneLens r)
 
         Inc r -> inc (cloneLens r)
         Dec r -> dec (cloneLens r)
@@ -261,7 +261,7 @@ toInstruction = \case
                     cpu.tclock += 4
                     pure (mmu.r)
 
-            pure (XorA r)
+            pure (Xor r)
 
         i | i .&. 0xC7 == 0x06 -> do
             cpu.tclock += 8

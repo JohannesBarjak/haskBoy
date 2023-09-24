@@ -1,8 +1,9 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 
 module HaskBoy.Cpu.Instructions
     ( inc, dec
-    , xorA
+    , xor
     , jr, call, ret
     , cmp
     , add, sub, sbc
@@ -18,7 +19,8 @@ import HaskBoy.Cpu
 import Debug.Trace (traceM)
 
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits(xor, (.&.), shiftL))
+import Data.Bits (Bits((.&.), shiftL))
+import Data.Bits qualified as Bits
 
 import Control.Monad.State.Strict
 import Control.Lens
@@ -135,9 +137,9 @@ rl r = zoom cpu $ do
             pure $ toBool (v .&. (1 `shiftL` 7))
 
 -- Xor register A
-xorA :: Word8 -> State Emulator ()
-xorA v = zoom cpu $ do
-    register.a %= xor v
+xor :: Word8 -> State Emulator ()
+xor v = zoom cpu $ do
+    register.a %= Bits.xor v
 
     register.hcarry .= False
     register.carry  .= False
