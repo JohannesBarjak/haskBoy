@@ -23,10 +23,11 @@ data Instruction
     | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
     | AHLI | HLIA
     | AHLD | HLDA
-    | Store (ALens' Emulator Word8)
+    | Store (ALens' Emulator Word8) Word8
     | Inc (ALens' Emulator Word8)
     | Inc16 (ALens' Register Word16)
     | Dec (ALens' Emulator Word8)
+    | Add (ALens' Emulator Word8)
     | Sub (ALens' Emulator Word8)
     | Sbc (ALens' Emulator Word8)
     | Ret
@@ -40,16 +41,6 @@ execute = \case
             mmu.addr nn .= v
 
             cpu.tclock += 8
-
-        0xE0 -> do
-            v <- fromIntegral <$> consumeByte
-            mmu.addr (0xFF00 + v) <~ use (cpu.register.a)
-
-            cpu.tclock += 12
-
-        0xC9 -> do
-            ret
-            cpu.tclock += 16
 
         0xCB -> consumeByte >>= \case
             i | i .&. 0xF8 == 0x30 -> error "Unimplemented Instr"
@@ -134,11 +125,6 @@ execute = \case
             cmp =<< use (mmu.addr nn)
             cpu.tclock += 8
 
-        0x86 -> do
-            nn <- use (cpu.register.hl)
-            add =<< use (mmu.addr nn)
-            cpu.tclock += 8
-
         0xF3 -> do
             cpu.interruptEnable .= False
             cpu.tclock += 4
@@ -153,16 +139,16 @@ execute' :: Instruction -> State Emulator ()
 execute' = \case
         Nop  -> pure ()
 
-        Ld rr lr -> cloneLens rr <~ use (cloneLens lr)
+        Ld lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
 
-        Store r -> do
-            v <- consumeByte
-            cloneLens r .= v
+        Store r v -> cloneLens r .= v
 
         XorA r -> xorA =<< use (cloneLens r)
 
         Inc r -> inc (cloneLens r)
         Dec r -> dec (cloneLens r)
+
+        Add r -> add =<< use (cloneLens r)
 
         Sub r -> sub =<< use (cloneLens r)
         Sbc r -> sbc =<< use (cloneLens r)
@@ -287,7 +273,7 @@ toInstruction = \case
                     cpu.tclock += 4
                     pure (mmu.r)
 
-            pure (Store r)
+            Store r <$> consumeByte
 
         i | i .&. 0xF8 == 0x40 -> do
             cpu.tclock += 4
@@ -378,9 +364,26 @@ toInstruction = \case
             cpu.tclock += 8
             pure AHLD
 
+        i | i .&. 0xF8 == 0x86 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Add r)
+
         0xC9 -> do
             cpu.tclock += 16
             pure Ret
+
+        0xE0 -> do
+            cpu.tclock += 12
+
+            v <- consumeByte
+            pure (Ld (mmu.addr (0xFF00 + fromIntegral v)) (cpu.register.a))
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
