@@ -33,8 +33,8 @@ data Instruction
     | Jr Bool
     | Ret
 
-execute :: Word8 -> State Emulator ()
-execute = \case
+execute' :: Word8 -> State Emulator ()
+execute' = \case
         0x77 -> do
             nn <- use (cpu.register.hl)
             v  <- use (cpu.register.a)
@@ -132,8 +132,8 @@ execute = \case
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
-execute' :: Instruction -> State Emulator ()
-execute' = \case
+execute :: Instruction -> State Emulator ()
+execute = \case
         Nop  -> pure ()
 
         Ld lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)

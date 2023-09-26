@@ -75,7 +75,7 @@ cycleCpu :: Integer -> State Emulator ()
 cycleCpu cycles
     = when (cycles > 0) $ do
         instr <- consumeByte
-        execute instr
+        execute =<< toInstruction instr
 
         printCpuDbgInfo instr
 
