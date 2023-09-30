@@ -24,14 +24,19 @@ data Instruction
     | AHLI | HLIA
     | AHLD | HLDA
     | Store (ALens' Emulator Word8) Word8
+    | Store16 (ALens' Emulator Word16) Word16
     | Inc (ALens' Emulator Word8)
     | Inc16 (ALens' Register Word16)
     | Dec (ALens' Emulator Word8)
     | Add (ALens' Emulator Word8)
     | Sub (ALens' Emulator Word8)
     | Sbc (ALens' Emulator Word8)
+    | Cmp Word8
+    | Jmp Word16
     | Jr Bool
+    | Call Word16
     | Ret
+    | DisableInterrupt
 
 execute' :: Word8 -> State Emulator ()
 execute' = \case
@@ -67,15 +72,6 @@ execute' = \case
             cpu.register.hl <~ popStack
             cpu.tclock += 12
 
-        0xC3 -> do
-            cpu.register.pc <~ consumeWord
-            cpu.tclock += 16
-
-        0xCD -> do
-            v <- consumeWord
-            call v
-            cpu.tclock += 24
-
         0xC5 -> do
             sp' <- use (cpu.register.sp)
             traceM ("stack pointer: 0x" ++ showHex sp' "")
@@ -91,10 +87,6 @@ execute' = \case
 
         0x11 -> do
             cpu.register.de <~ consumeWord
-            cpu.tclock += 12
-
-        0x21 -> do
-            cpu.register.hl <~ consumeWord
             cpu.tclock += 12
 
         0x31 -> do
@@ -113,18 +105,10 @@ execute' = \case
 
             cpu.tclock += 16
 
-        0xF0 -> do
-            v <- consumeByte
-            cpu.register.a <~ use (mmu.addr (0xFF00 + fromIntegral v))
-
         0xBE -> do
             nn <- use (cpu.register.hl)
             cmp =<< use (mmu.addr nn)
             cpu.tclock += 8
-
-        0xF3 -> do
-            cpu.interruptEnable .= False
-            cpu.tclock += 4
 
         0xFE -> do
             cmp =<< consumeByte
@@ -136,9 +120,10 @@ execute :: Instruction -> State Emulator ()
 execute = \case
         Nop  -> pure ()
 
-        Ld lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
+        Ld   lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
 
-        Store r v -> cloneLens r .= v
+        Store   r v -> cloneLens r .= v
+        Store16 r v -> cloneLens r .= v
 
         Xor r -> xor =<< use (cloneLens r)
 
@@ -176,9 +161,15 @@ execute = \case
 
         Inc16 r -> cpu.register.cloneLens r += 1
 
-        Jr v -> jr v
+        Cmp v -> cmp v
 
+        Jr v -> jr v
+        Jmp v -> cpu.register.pc .= v
+
+        Call v -> call v
         Ret -> ret
+
+        DisableInterrupt -> cpu.interruptEnable .= False
 
 toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
@@ -378,15 +369,45 @@ toInstruction = \case
         0x20 -> Jr . not <$> use (cpu.register.zero)
         0x28 -> Jr <$> use (cpu.register.zero)
 
+        0x11 -> do
+            cpu.tclock += 12
+            Store16 (cpu.register.de) <$> consumeWord
+
+        0x21 -> do
+            cpu.tclock += 12
+            Store16 (cpu.register.hl) <$> consumeWord
+
+        0xC3 -> do
+            cpu.tclock += 16
+            Jmp <$> consumeWord
+
         0xC9 -> do
             cpu.tclock += 16
             pure Ret
 
+        0xCD -> do
+            cpu.tclock += 24
+            Call <$> consumeWord
+
         0xE0 -> do
             cpu.tclock += 12
 
-            v <- consumeByte
-            pure (Ld (mmu.addr (0xFF00 + fromIntegral v)) (cpu.register.a))
+            v <- fromIntegral <$> consumeByte
+            pure (Ld (mmu.addr (0xFF00 + v)) (cpu.register.a))
+
+        0xF0 -> do
+            cpu.tclock += 12
+
+            v <- fromIntegral <$> consumeByte
+            pure (Ld (cpu.register.a) (mmu.addr (0xFF00 + v)))
+
+        0xF3 -> do
+            cpu.tclock += 4
+            pure DisableInterrupt
+
+        0xFE -> do
+            cpu.tclock += 8
+            Cmp <$> consumeByte
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
