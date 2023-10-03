@@ -5,7 +5,7 @@
 {-# LANGUAGE RankNTypes      #-}
 
 module HaskBoy.Cpu
-    ( Register(..)
+    ( Registers(..)
     , af, bc, de, hl, sp, pc
     , a, flag, b, c, d, e, h, l
     , zero, subOp, hcarry, carry
@@ -23,13 +23,13 @@ import Data.Bits (Bits(shiftL, shiftR, complement), (.|.), (.&.))
 import Foreign.Marshal (toBool)
 
 data Cpu = Cpu
-    { _register        :: Register
+    { _register        :: Registers
     , _interruptEnable :: Bool
     , _tclock          :: Integer -- ^ The Cpu clock uses tcycles
     }
 
 -- | Store 16bit registers
-data Register = Register
+data Registers = Registers
     { _af :: Word16
     , _bc :: Word16
     , _de :: Word16
@@ -39,30 +39,30 @@ data Register = Register
     }
 
 makeLenses ''Cpu
-makeLenses ''Register
+makeLenses ''Registers
 
-a :: Lens' Register Word8
+a :: Lens' Registers Word8
 a = lens _a (\reg v -> reg&af %~ setUpperByte v)
 
-flag :: Lens' Register Word8
-flag = lens _flag (\regs@Register{_af} v -> regs { _af = fromIntegral v .|. (_af .&. 0xFF00) })
+flag :: Lens' Registers Word8
+flag = lens _flag (\regs@Registers{_af} v -> regs { _af = fromIntegral v .|. (_af .&. 0xFF00) })
 
-b :: Lens' Register Word8
+b :: Lens' Registers Word8
 b = lens _b (\reg v -> reg&bc %~ setUpperByte v)
 
-c :: Lens' Register Word8
+c :: Lens' Registers Word8
 c = lens _c (\reg v -> reg&bc %~ setLowerByte v)
 
-d :: Lens' Register Word8
+d :: Lens' Registers Word8
 d = lens _d (\reg v -> reg&de %~ setUpperByte v)
 
-e :: Lens' Register Word8
+e :: Lens' Registers Word8
 e = lens _e (\reg v -> reg&de %~ setLowerByte v)
 
-h :: Lens' Register Word8
+h :: Lens' Registers Word8
 h = lens _h (\reg v -> reg&hl %~ setUpperByte v)
 
-l :: Lens' Register Word8
+l :: Lens' Registers Word8
 l = lens _l (\reg v -> reg&hl %~ setLowerByte v)
 
 setUpperByte :: Word8 -> Word16 -> Word16
@@ -71,48 +71,48 @@ setUpperByte v w = (fromIntegral v `shiftL` 8) .|. (w .&. 0xFF)
 setLowerByte :: Word8 -> Word16 -> Word16
 setLowerByte v w = fromIntegral v .|. (w .&. 0xFF00)
 
-_a :: Register -> Word8
-_a Register{_af} = fromIntegral $ _af `shiftR` 8
+_a :: Registers -> Word8
+_a Registers{_af} = fromIntegral $ _af `shiftR` 8
 
-_flag :: Register -> Word8
-_flag Register{_af} = fromIntegral $ _af .&. 0x00FF
+_flag :: Registers -> Word8
+_flag Registers{_af} = fromIntegral $ _af .&. 0x00FF
 
-_b :: Register -> Word8
-_b Register{_bc} = fromIntegral $ _bc `shiftR` 8
+_b :: Registers -> Word8
+_b Registers{_bc} = fromIntegral $ _bc `shiftR` 8
 
-_c :: Register -> Word8
-_c Register{_bc} = fromIntegral $ _bc .&. 0x00FF
+_c :: Registers -> Word8
+_c Registers{_bc} = fromIntegral $ _bc .&. 0x00FF
 
-_d :: Register -> Word8
-_d Register{_de} = fromIntegral $ _de `shiftR` 8
+_d :: Registers -> Word8
+_d Registers{_de} = fromIntegral $ _de `shiftR` 8
 
-_e :: Register -> Word8
-_e Register{_de} = fromIntegral $ _de .&. 0x00FF
+_e :: Registers -> Word8
+_e Registers{_de} = fromIntegral $ _de .&. 0x00FF
 
-_h :: Register -> Word8
-_h Register{_hl} = fromIntegral $ _hl `shiftR` 8
+_h :: Registers -> Word8
+_h Registers{_hl} = fromIntegral $ _hl `shiftR` 8
 
-_l :: Register -> Word8
-_l Register{_hl} = fromIntegral $ _hl .&. 0x00FF
+_l :: Registers -> Word8
+_l Registers{_hl} = fromIntegral $ _hl .&. 0x00FF
 
-zero :: Lens' Register Bool
+zero :: Lens' Registers Bool
 zero = lens (`readBit` 7) (`assignBit` 7)
 
-subOp :: Lens' Register Bool
+subOp :: Lens' Registers Bool
 subOp = lens (`readBit` 6) (`assignBit` 6)
 
-hcarry :: Lens' Register Bool
+hcarry :: Lens' Registers Bool
 hcarry = lens (`readBit` 5) (`assignBit` 5)
 
-carry :: Lens' Register Bool
+carry :: Lens' Registers Bool
 carry = lens (`readBit` 4) (`assignBit` 4)
 
 -- Read bit in flag register
-readBit :: Register -> Int -> Bool
+readBit :: Registers -> Int -> Bool
 readBit r i = toBool $ (r^.flag `shiftR` i) .&. 1
 
 -- Assign bit in flag register
-assignBit :: Register -> Int -> Bool -> Register
+assignBit :: Registers -> Int -> Bool -> Registers
 assignBit r i True  = r&flag .~ r^.flag .|. (1 `shiftL` i)
 assignBit r i False = r&flag .~ r^.flag .&. complement (1 `shiftL` i)
 

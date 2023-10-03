@@ -9,7 +9,7 @@ import HaskBoy.Mmu (Mmu(..))
 
 import HaskBoy.Cpu
     ( Cpu(..)
-    , Register(..)
+    , Registers(..)
     )
 
 import HaskBoy.Ppu
@@ -67,7 +67,7 @@ initialEmulator _mmu = Emulator
 
 initialCpu :: Cpu
 initialCpu = Cpu
-    { _register = Register
+    { _register = Registers
         { _af = 0x01B0
         , _bc = 0x0013
         , _de = 0x00D8

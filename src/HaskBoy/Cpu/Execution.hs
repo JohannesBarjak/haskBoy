@@ -26,7 +26,7 @@ data Instruction
     | Store (ALens' Emulator Word8) Word8
     | Store16 (ALens' Emulator Word16) Word16
     | Inc (ALens' Emulator Word8)
-    | Inc16 (ALens' Register Word16)
+    | Inc16 (ALens' Registers Word16)
     | Dec (ALens' Emulator Word8)
     | Add (ALens' Emulator Word8)
     | Sub (ALens' Emulator Word8)
@@ -411,7 +411,7 @@ toInstruction = \case
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
-argToRegister :: Word8 -> State Emulator (Either (ALens' Mmu Word8) (ALens' Register Word8))
+argToRegister :: Word8 -> State Emulator (Either (ALens' Mmu Word8) (ALens' Registers Word8))
 argToRegister 0 = pure $ Right b
 argToRegister 1 = pure $ Right c
 argToRegister 2 = pure $ Right d

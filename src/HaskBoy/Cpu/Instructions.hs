@@ -118,7 +118,7 @@ bit n v = zoom cpu $ do
     register.hcarry .= True
     register.subOp .= False
 
-rl :: Lens' Register Word8 -> State Emulator ()
+rl :: Lens' Registers Word8 -> State Emulator ()
 rl r = zoom cpu $ do
     oldCarry <- use (register.carry)
 
