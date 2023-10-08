@@ -194,7 +194,7 @@ toInstruction = \case
                     cpu.tclock += 8
                     pure (mmu.r)
 
-            pure (Dec r)
+            pure (Inc r)
 
         i | i .&. 0xC7 == 0x05 -> do
             cpu.tclock += 4
