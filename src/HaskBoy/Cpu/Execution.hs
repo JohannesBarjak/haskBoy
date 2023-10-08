@@ -20,6 +20,8 @@ import Numeric (showHex)
 data Instruction
     = Nop
     | Xor (ALens' Emulator Word8)
+    | Or (ALens' Emulator Word8)
+    | And Value
     | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
     | AHLI | HLIA
     | AHLD | HLDA
@@ -34,6 +36,9 @@ data Instruction
     | Cmp Word8
     | Jmp Word16
     | Jr Bool
+    | Push Word16
+    | Pop (ALens' Registers Word16)
+    | PopAF
     | Call Word16
     | Ret
     | DisableInterrupt
@@ -41,6 +46,7 @@ data Instruction
 data Value
     = Register (ALens' Cpu Word8)
     | Address  (ALens' Mmu Word8)
+    | Byte Word8
 
 execute' :: Word8 -> State Emulator ()
 execute' = \case
@@ -63,10 +69,6 @@ execute' = \case
                 cpu.tclock += 8
 
             arg  -> error $ "Invalid CB argument: " ++ showHex arg ""
-
-        0xC1 -> do
-            cpu.register.bc <~ popStack
-            cpu.tclock += 12
 
         0xD1 -> do
             cpu.register.de <~ popStack
@@ -112,6 +114,11 @@ execute = \case
         Store16 r v -> cloneLens r .= v
 
         Xor r -> zoom (cpu.register) . xor =<< use (cloneLens r)
+        Or r -> zoom (cpu.register) . byteOr =<< use (cloneLens r)
+
+        And (Byte v) -> zoom (cpu.register) (byteAnd v)
+        And (Register r) -> zoom (cpu.register) . byteAnd =<< use (cpu.cloneLens r)
+        And (Address v) -> zoom (cpu.register) . byteAnd =<< use (mmu.cloneLens v)
 
         Inc r -> inc (cloneLens r)
         Dec r -> dec (cloneLens r)
@@ -152,6 +159,14 @@ execute = \case
         Jr v -> jr v
         Jmp v -> cpu.register.pc .= v
 
+        Push v -> pushStack v
+        Pop r -> cpu.register.cloneLens r <~ popStack
+
+        PopAF -> do
+            v <- use (cpu.register.flag)
+            cpu.register.af <~ popStack
+            cpu.register.flag .= v
+
         Call v -> call v
         Ret -> ret
 
@@ -162,6 +177,10 @@ toInstruction = \case
         0x00 -> do
             cpu.tclock += 4
             pure Nop
+
+        0x01 -> do
+            cpu.tclock += 12
+            Store16 (cpu.register.bc) <$> consumeWord
 
         0x02 -> do
             cpu.tclock += 8
@@ -367,9 +386,28 @@ toInstruction = \case
             cpu.tclock += 12
             Store16 (cpu.register.hl) <$> consumeWord
 
+        i | i .&. 0xF8 == 0xB0 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Or r)
+
+        0xC1 -> do
+            cpu.tclock += 12
+            pure (Pop bc)
+
         0xC3 -> do
             cpu.tclock += 16
             Jmp <$> consumeWord
+
+        0xC5 -> do
+            cpu.tclock += 16
+            Push <$> use (cpu.register.bc)
 
         0xC9 -> do
             cpu.tclock += 16
@@ -385,6 +423,23 @@ toInstruction = \case
             v <- fromIntegral <$> consumeByte
             pure (Ld (mmu.addr (0xFF00 + v)) (cpu.register.a))
 
+        0xE1 -> do
+            cpu.tclock += 12
+            pure (Pop hl)
+
+        0xE2 -> do
+            cpu.tclock += 8
+            v <- fromIntegral <$> use (cpu.register.c)
+            pure (Ld (mmu.addr (0xFF00 + v)) (cpu.register.a))
+
+        0xE5 -> do
+            cpu.tclock += 16
+            Push <$> use (cpu.register.hl)
+
+        0xE6 -> do
+            cpu.tclock += 8
+            And . Byte <$> consumeByte
+
         0xEA -> do
             cpu.tclock += 16
 
@@ -397,9 +452,23 @@ toInstruction = \case
             v <- fromIntegral <$> consumeByte
             pure (Ld (cpu.register.a) (mmu.addr (0xFF00 + v)))
 
+        0xF1 -> do
+            cpu.tclock += 12
+            pure PopAF
+
         0xF3 -> do
             cpu.tclock += 4
             pure DisableInterrupt
+
+        0xF5 -> do
+            cpu.tclock += 16
+            Push <$> use (cpu.register.af)
+
+        0xFA -> do
+            cpu.tclock += 16
+
+            v <- consumeWord
+            pure (Ld (cpu.register.a) (mmu.addr v))
 
         0xFE -> do
             cpu.tclock += 8

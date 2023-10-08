@@ -3,7 +3,7 @@
 
 module HaskBoy.Cpu.Instructions
     ( inc, dec
-    , xor
+    , byteAnd, xor, byteOr
     , jr, call, ret
     , cmp
     , add, sub, sbc
@@ -19,7 +19,7 @@ import HaskBoy.Cpu
 import Debug.Trace (traceM)
 
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits((.&.), shiftL))
+import Data.Bits (Bits((.&.), (.|.), shiftL))
 import Data.Bits qualified as Bits
 
 import Control.Monad.State.Strict
@@ -29,21 +29,25 @@ import Foreign.Marshal.Utils (fromBool, toBool)
 
 inc :: Lens' Emulator Word8 -> State Emulator ()
 inc r = do
-    cpu.register.hcarry <~ (== 0xF) . (.&. 0xF) <$> use r
+    v <- use r
+    let result = v + 1
 
-    r += 1
-
-    cpu.register.zero <~ not . toBool <$> use r
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= (v .&. 0xF == 0xF)
     cpu.register.subOp .= False
+
+    r .= result
 
 dec :: Lens' Emulator Word8 -> State Emulator ()
 dec r = do
-    cpu.register.hcarry <~ not . toBool . (.&. 0xF) <$> use r
+    v <- use r
+    let result = v - 1
 
-    r -= 1
-
-    cpu.register.zero <~ not . toBool <$> use r
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= (v .&. 0xF == 0)
     cpu.register.subOp .= True
+
+    r .= result
 
 jr :: Bool -> State Emulator ()
 jr cond = do
@@ -133,15 +137,41 @@ rl r = zoom cpu $ do
             v <- use (register.r)
             pure $ toBool (v .&. (1 `shiftL` 7))
 
--- Xor register A
-xor :: Word8 -> State Registers ()
-xor v = do
-    a %= Bits.xor v
+byteOr :: Word8 -> State Registers ()
+byteOr n = do
+    v <- use a
+    let result = v .|. n
 
-    zero <~ not . toBool <$> use a
+    zero .= (result == 0)
     hcarry .= False
-    carry  .= False
-    subOp  .= False
+    carry .= False
+    subOp .= False
+
+    a .= result
+
+xor :: Word8 -> State Registers ()
+xor n = do
+    v <- use a
+    let result = Bits.xor v n
+
+    zero .= (result == 0)
+    hcarry .= False
+    carry .= False
+    subOp .= False
+
+    a .= result
+
+byteAnd :: Word8 -> State Registers ()
+byteAnd n = do
+    v <- use a
+    let result = v .&. n
+
+    zero .= (result == 0)
+    hcarry .= True
+    carry .= False
+    subOp .= False
+
+    a .= result
 
 -- Read the current and following byte as a 16-bit word
 -- and then increase the pc register by 2
