@@ -97,7 +97,7 @@ execute' = \case
 
         0xBE -> do
             nn <- use (cpu.register.hl)
-            cmp =<< use (mmu.addr nn)
+            zoom (cpu.register) . cmp =<< use (mmu.addr nn)
             cpu.tclock += 8
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
@@ -111,7 +111,7 @@ execute = \case
         Store   r v -> cloneLens r .= v
         Store16 r v -> cloneLens r .= v
 
-        Xor r -> xor =<< use (cloneLens r)
+        Xor r -> zoom (cpu.register) . xor =<< use (cloneLens r)
 
         Inc r -> inc (cloneLens r)
         Dec r -> dec (cloneLens r)
@@ -147,7 +147,7 @@ execute = \case
 
         Inc16 r -> cpu.register.cloneLens r += 1
 
-        Cmp v -> cmp v
+        Cmp v -> zoom (cpu.register) $ cmp v
 
         Jr v -> jr v
         Jmp v -> cpu.register.pc .= v

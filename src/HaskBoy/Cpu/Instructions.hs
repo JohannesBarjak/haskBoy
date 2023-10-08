@@ -58,14 +58,14 @@ jr cond = do
         cpu.register.pc += 1 -- Consume byte
         cpu.tclock += 8
 
-cmp :: Word8 -> State Emulator ()
+cmp :: Word8 -> State Registers ()
 cmp n = do
-    v <- use (cpu.register.a)
+    v <- use a
 
-    cpu.register.zero   .= (v == n)
-    cpu.register.carry  .= (v < n)
-    cpu.register.hcarry .= (v .&. 0xF < n .&. 0xF)
-    cpu.register.subOp  .= True
+    zero .= (v == n)
+    carry .= (v < n)
+    hcarry .= (v .&. 0xF < n .&. 0xF)
+    subOp .= True
 
 call :: Address -> State Emulator ()
 call nn = do
@@ -104,14 +104,10 @@ add v = zoom cpu $ do
 sub :: Word8 -> State Registers ()
 sub n = do
     v <- use a
-    let result = v - n
 
-    zero .= (result == 0)
-    carry .= (v < n)
-    hcarry .= (v .&. 0xF < n .&. 0xF)
-    subOp .= True
-
-    a .= result
+    -- Subtraction in the Gameboy sets flags by comparing
+    cmp n
+    a .= v - n
 
 bit :: Int -> Word8 -> State Emulator ()
 bit n v = zoom cpu $ do
@@ -138,15 +134,14 @@ rl r = zoom cpu $ do
             pure $ toBool (v .&. (1 `shiftL` 7))
 
 -- Xor register A
-xor :: Word8 -> State Emulator ()
-xor v = zoom cpu $ do
-    register.a %= Bits.xor v
+xor :: Word8 -> State Registers ()
+xor v = do
+    a %= Bits.xor v
 
-    register.hcarry .= False
-    register.carry  .= False
-    register.subOp  .= False
-
-    register.zero <~ not . toBool <$> use (register.a)
+    zero <~ not . toBool <$> use a
+    hcarry .= False
+    carry  .= False
+    subOp  .= False
 
 -- Read the current and following byte as a 16-bit word
 -- and then increase the pc register by 2
