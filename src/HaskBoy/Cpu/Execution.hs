@@ -38,6 +38,10 @@ data Instruction
     | Ret
     | DisableInterrupt
 
+data Value
+    = Register (ALens' Cpu Word8)
+    | Address  (ALens' Mmu Word8)
+
 execute' :: Word8 -> State Emulator ()
 execute' = \case
         0x77 -> do
@@ -85,33 +89,15 @@ execute' = \case
             cpu.register.bc <~ consumeWord
             cpu.tclock += 12
 
-        0x11 -> do
-            cpu.register.de <~ consumeWord
-            cpu.tclock += 12
-
-        0x31 -> do
-            cpu.register.sp <~ consumeWord
-            cpu.tclock += 12
-
         0xE2 -> do
             offset <- fromIntegral <$> use (cpu.register.c)
             mmu.addr (0xFF00 + offset) <~ use (cpu.register.a)
 
             cpu.tclock += 8
 
-        0xEA -> do
-            nn <- consumeWord
-            mmu.addr nn <~ use (cpu.register.a)
-
-            cpu.tclock += 16
-
         0xBE -> do
             nn <- use (cpu.register.hl)
             cmp =<< use (mmu.addr nn)
-            cpu.tclock += 8
-
-        0xFE -> do
-            cmp =<< consumeByte
             cpu.tclock += 8
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
@@ -330,6 +316,10 @@ toInstruction = \case
             cpu.tclock += 8
             pure HLIA
 
+        0x31 -> do
+            cpu.tclock += 12
+            Store16 (cpu.register.sp) <$> consumeWord
+
         0x32 -> do
             cpu.tclock += 8
             pure HLDA
@@ -395,6 +385,12 @@ toInstruction = \case
             v <- fromIntegral <$> consumeByte
             pure (Ld (mmu.addr (0xFF00 + v)) (cpu.register.a))
 
+        0xEA -> do
+            cpu.tclock += 16
+
+            v <- consumeWord
+            pure (Ld (mmu.addr v) (cpu.register.a))
+
         0xF0 -> do
             cpu.tclock += 12
 
@@ -428,6 +424,3 @@ argToRegister _ = undefined
 
 extractOctalArg :: (Bits a, Num a) => Int -> a -> a
 extractOctalArg i v = shiftR v i .&. 7
-
-halfCarry :: (Bits a, Num a) => a -> a -> Bool
-halfCarry v1 v2 = (((v1 .&. 0x0F) + (v2 .&. 0x0F)) .&. 0x10) == 0x10
