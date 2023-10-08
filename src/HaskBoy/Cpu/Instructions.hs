@@ -101,16 +101,17 @@ add v = zoom cpu $ do
     register.zero <~ (use (register.a) <&> (== 0))
     register.subOp .= False
 
-sub :: Word8 -> State Emulator ()
-sub v = zoom cpu $ do
-    a' <- use (register.a)
-    register.carry .= (v > a')
-    register.hcarry .= (v .&. 0xF > a' .&. 0xF)
+sub :: Word8 -> State Registers ()
+sub n = do
+    v <- use a
+    let result = v - n
 
-    register.a .= (a' - v)
+    zero .= (result == 0)
+    carry .= (v < n)
+    hcarry .= (v .&. 0xF < n .&. 0xF)
+    subOp .= True
 
-    register.zero <~ (use (register.a) <&> (== 0))
-    register.subOp .= True
+    a .= result
 
 bit :: Int -> Word8 -> State Emulator ()
 bit n v = zoom cpu $ do

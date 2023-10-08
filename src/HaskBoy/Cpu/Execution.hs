@@ -118,7 +118,7 @@ execute = \case
 
         Add r -> add =<< use (cloneLens r)
 
-        Sub r -> sub =<< use (cloneLens r)
+        Sub r -> zoom (cpu.register) . sub =<< use (cloneLens r)
         Sbc r -> sbc =<< use (cloneLens r)
 
         AHLI -> do
