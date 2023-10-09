@@ -158,22 +158,6 @@ toInstruction = \case
             cpu.tclock += 8
             pure (Inc16 bc)
 
-        0x0B -> do
-            cpu.tclock += 8
-            pure (Dec16 bc)
-
-        0x13 -> do
-            cpu.tclock += 8
-            pure (Inc16 de)
-
-        0x23 -> do
-            cpu.tclock += 8
-            pure (Inc16 hl)
-
-        0x33 -> do
-            cpu.tclock += 8
-            pure (Inc16 sp)
-
         i | i .&. 0xC7 == 0x04 -> do
             cpu.tclock += 4
 
@@ -196,39 +180,6 @@ toInstruction = \case
 
             pure (Dec r)
 
-        i | i .&. 0xF8 == 0x90 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-
-            pure (Sub r)
-
-        i | i .&. 0xF8 == 0x98 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-
-            pure (Sbc r)
-
-        i | i .&. 0xF8 == 0xA8 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-
-            pure (Xor r)
-
         i | i .&. 0xC7 == 0x06 -> do
             cpu.tclock += 8
 
@@ -239,6 +190,22 @@ toInstruction = \case
                     pure (mmu.r)
 
             Store r <$> consumeByte
+
+        0x0B -> do
+            cpu.tclock += 8
+            pure (Dec16 bc)
+
+        0x13 -> do
+            cpu.tclock += 8
+            pure (Inc16 de)
+
+        0x23 -> do
+            cpu.tclock += 8
+            pure (Inc16 hl)
+
+        0x33 -> do
+            cpu.tclock += 8
+            pure (Inc16 sp)
 
         i | i .&. 0xF8 == 0x40 -> do
             cpu.tclock += 4
@@ -272,6 +239,39 @@ toInstruction = \case
                     pure (mmu.r)
             
             pure (Ld (cpu.register.d) r)
+
+        i | i .&. 0xF8 == 0x90 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Sub r)
+
+        i | i .&. 0xF8 == 0x98 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Sbc r)
+
+        i | i .&. 0xF8 == 0xA8 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Xor r)
 
         i | i .&. 0xF8 == 0x60 -> do
             cpu.tclock += 4
