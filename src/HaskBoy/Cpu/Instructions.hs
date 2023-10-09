@@ -77,9 +77,7 @@ call nn = do
     cpu.register.pc .= nn
 
 ret :: State Emulator ()
-ret = do
-    v <- popStack
-    cpu.register.pc .= v
+ret = cpu.register.pc <~ popStack
 
 sbc :: Word8 -> State Emulator ()
 sbc v = zoom cpu $ do
@@ -94,16 +92,17 @@ sbc v = zoom cpu $ do
     register.zero <~ (use (register.a) <&> (== 0))
     register.subOp .= True
 
-add :: Word8 -> State Emulator ()
-add v = zoom cpu $ do
-    a' <- use (register.a)
-    register.hcarry .= ((a' .&. 0xF) +  (v .&. 0xF) > 0xF)
-    register.carry .= (fromIntegral a' + fromIntegral v > (0xFF :: Int))
+add :: Word8 -> State Registers ()
+add n = do
+    v <- use a
+    let result = v + n
 
-    register.a .= (a' + v)
+    zero .= (result == 0)
+    hcarry .= ((v .&. 0xF) + (n .&. 0xF) > 0xF)
+    carry .= (fromIntegral v + fromIntegral n > (0xFF :: Int))
+    subOp .= False
 
-    register.zero <~ (use (register.a) <&> (== 0))
-    register.subOp .= False
+    a .= result
 
 sub :: Word8 -> State Registers ()
 sub n = do
@@ -113,11 +112,11 @@ sub n = do
     cmp n
     a .= v - n
 
-bit :: Int -> Word8 -> State Emulator ()
-bit n v = zoom cpu $ do
-    register.zero .= (v .&. shiftL 1 n == 0)
-    register.hcarry .= True
-    register.subOp .= False
+bit :: Int -> Word8 -> State Registers ()
+bit n v = do
+    zero .= (v .&. shiftL 1 n == 0)
+    hcarry .= True
+    subOp .= False
 
 rl :: Lens' Registers Word8 -> State Emulator ()
 rl r = zoom cpu $ do

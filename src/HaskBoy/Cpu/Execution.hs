@@ -12,15 +12,15 @@ import Control.Lens
 import Control.Monad.State.Strict
 
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits((.&.), shiftR))
+import Data.Bits (Bits((.&.), shiftR, complement))
 
-import Debug.Trace (traceM)
 import Numeric (showHex)
 
 data Instruction
     = Nop
     | Xor (ALens' Emulator Word8)
     | Or (ALens' Emulator Word8)
+    | Cpl
     | And Value
     | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
     | AHLI | HLIA
@@ -30,9 +30,11 @@ data Instruction
     | Inc (ALens' Emulator Word8)
     | Inc16 (ALens' Registers Word16)
     | Dec (ALens' Emulator Word8)
+    | Dec16 (ALens' Registers Word16)
     | Add (ALens' Emulator Word8)
     | Sub (ALens' Emulator Word8)
     | Sbc (ALens' Emulator Word8)
+    | Bit Int Word8
     | Cmp Word8
     | Jmp Word16
     | Jr Bool
@@ -41,68 +43,14 @@ data Instruction
     | PopAF
     | Call Word16
     | Ret
+    | RetNZ
+    | EnableInterrupt
     | DisableInterrupt
 
 data Value
     = Register (ALens' Cpu Word8)
     | Address  (ALens' Mmu Word8)
     | Byte Word8
-
-execute' :: Word8 -> State Emulator ()
-execute' = \case
-        0x77 -> do
-            nn <- use (cpu.register.hl)
-            v  <- use (cpu.register.a)
-
-            mmu.addr nn .= v
-
-            cpu.tclock += 8
-
-        0xCB -> consumeByte >>= \case
-            i | i .&. 0xF8 == 0x30 -> error "Unimplemented Instr"
-
-            0x7c -> do
-                bit 7 =<< use (cpu.register.h)
-                cpu.tclock += 8
-            0x11 -> do
-                rl c
-                cpu.tclock += 8
-
-            arg  -> error $ "Invalid CB argument: " ++ showHex arg ""
-
-        0xD1 -> do
-            cpu.register.de <~ popStack
-            cpu.tclock += 12
-
-        0xE1 -> do
-            cpu.register.hl <~ popStack
-            cpu.tclock += 12
-
-        0xC5 -> do
-            sp' <- use (cpu.register.sp)
-            traceM ("stack pointer: 0x" ++ showHex sp' "")
-            pushStack =<< use (cpu.register.bc)
-
-        0x17 -> do
-            rl a
-            cpu.tclock += 4
-
-        0x01 -> do
-            cpu.register.bc <~ consumeWord
-            cpu.tclock += 12
-
-        0xE2 -> do
-            offset <- fromIntegral <$> use (cpu.register.c)
-            mmu.addr (0xFF00 + offset) <~ use (cpu.register.a)
-
-            cpu.tclock += 8
-
-        0xBE -> do
-            nn <- use (cpu.register.hl)
-            zoom (cpu.register) . cmp =<< use (mmu.addr nn)
-            cpu.tclock += 8
-
-        instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
 execute :: Instruction -> State Emulator ()
 execute = \case
@@ -116,17 +64,25 @@ execute = \case
         Xor r -> zoom (cpu.register) . xor =<< use (cloneLens r)
         Or r -> zoom (cpu.register) . byteOr =<< use (cloneLens r)
 
+        Cpl -> do
+            cpu.register.a %= complement
+            cpu.register.hcarry .= True
+            cpu.register.subOp .= True
+
         And (Byte v) -> zoom (cpu.register) (byteAnd v)
         And (Register r) -> zoom (cpu.register) . byteAnd =<< use (cpu.cloneLens r)
         And (Address v) -> zoom (cpu.register) . byteAnd =<< use (mmu.cloneLens v)
 
         Inc r -> inc (cloneLens r)
         Dec r -> dec (cloneLens r)
+        Dec16 r -> cpu.register.cloneLens r -= 1
 
-        Add r -> add =<< use (cloneLens r)
+        Add r -> zoom (cpu.register) . add =<< use (cloneLens r)
 
         Sub r -> zoom (cpu.register) . sub =<< use (cloneLens r)
         Sbc r -> sbc =<< use (cloneLens r)
+
+        Bit n v -> zoom (cpu.register) (bit n v)
 
         AHLI -> do
             nn <- use (cpu.register.hl)
@@ -170,6 +126,16 @@ execute = \case
         Call v -> call v
         Ret -> ret
 
+        RetNZ -> do
+            z <- use (cpu.register.zero)
+
+            if z then
+                cpu.tclock += 8
+            else do
+                cpu.tclock += 20
+                ret
+
+        EnableInterrupt -> cpu.interruptEnable .= True
         DisableInterrupt -> cpu.interruptEnable .= False
 
 toInstruction :: Word8 -> State Emulator Instruction
@@ -191,6 +157,10 @@ toInstruction = \case
         0x03 -> do
             cpu.tclock += 8
             pure (Inc16 bc)
+
+        0x0B -> do
+            cpu.tclock += 8
+            pure (Dec16 bc)
 
         0x13 -> do
             cpu.tclock += 8
@@ -386,6 +356,36 @@ toInstruction = \case
             cpu.tclock += 12
             Store16 (cpu.register.hl) <$> consumeWord
 
+        0x2F -> do
+            cpu.tclock += 4
+            pure Cpl
+
+        0x77 -> do
+            cpu.tclock += 8
+
+            nn <- use (cpu.register.hl)
+            pure (Ld (mmu.addr nn) (cpu.register.a))
+
+        i | i .&. 0xF8 == 0x80 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Add r)
+
+        i | i .&. 0xF8 == 0xA0 -> do
+            cpu.tclock += 4
+
+            argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure . And $ Register (register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (And . Address $ r)
+
         i | i .&. 0xF8 == 0xB0 -> do
             cpu.tclock += 4
 
@@ -396,6 +396,8 @@ toInstruction = \case
                     pure (mmu.r)
 
             pure (Or r)
+
+        0xC0 -> pure RetNZ
 
         0xC1 -> do
             cpu.tclock += 12
@@ -412,6 +414,13 @@ toInstruction = \case
         0xC9 -> do
             cpu.tclock += 16
             pure Ret
+
+        0xCB -> consumeByte >>= \case
+            0x7C -> do
+                cpu.tclock += 8
+                Bit 7 <$> use (cpu.register.h)
+
+            arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
         0xCD -> do
             cpu.tclock += 24
@@ -469,6 +478,10 @@ toInstruction = \case
 
             v <- consumeWord
             pure (Ld (cpu.register.a) (mmu.addr v))
+
+        0xFB -> do
+            cpu.tclock += 4
+            pure EnableInterrupt
 
         0xFE -> do
             cpu.tclock += 8
