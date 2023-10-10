@@ -64,11 +64,11 @@ jr cond = do
 
 cmp :: Word8 -> State Registers ()
 cmp n = do
-    v <- use a
+    a' <- use a
 
-    zero .= (v == n)
-    carry .= (v < n)
-    hcarry .= (v .&. 0xF < n .&. 0xF)
+    zero .= (a' == n)
+    carry .= (a' < n)
+    hcarry .= (a' .&. 0xF < n .&. 0xF)
     subOp .= True
 
 call :: Address -> State Emulator ()
@@ -79,38 +79,38 @@ call nn = do
 ret :: State Emulator ()
 ret = cpu.register.pc <~ popStack
 
-sbc :: Word8 -> State Emulator ()
-sbc v = zoom cpu $ do
-    a' <- use (register.a)
-    oldCarry <- use (register.carry)
-    let n = v + fromIntegral (fromEnum oldCarry)
+sbc :: Word8 -> State Registers ()
+sbc n = do
+    a' <- use a
+    carry' <- use carry
+    let result = a' - n + fromBool carry'
 
-    register.a .= (a' - n)
+    zero .= (result == 0)
+    hcarry .= (a' .&. 0xF < (n .&. 0xF) + fromBool carry')
+    carry .= (fromIntegral a' < (fromIntegral n + fromBool carry' :: Int))
+    subOp .= True
 
-    register.carry .= (a' < n)
-    register.hcarry .= ((v .&. 0xF) + fromIntegral (fromEnum oldCarry) > a' .&. 0xF)
-    register.zero <~ (use (register.a) <&> (== 0))
-    register.subOp .= True
+    a .= result
 
 add :: Word8 -> State Registers ()
 add n = do
-    v <- use a
-    let result = v + n
+    a' <- use a
+    let result = a' + n
 
     zero .= (result == 0)
-    hcarry .= ((v .&. 0xF) + (n .&. 0xF) > 0xF)
-    carry .= (fromIntegral v + fromIntegral n > (0xFF :: Int))
+    hcarry .= ((a' .&. 0xF) + (n .&. 0xF) > 0xF)
+    carry .= (fromIntegral a' + fromIntegral n > (0xFF :: Int))
     subOp .= False
 
     a .= result
 
 sub :: Word8 -> State Registers ()
 sub n = do
-    v <- use a
+    a' <- use a
 
-    -- Subtraction in the Gameboy sets flags by comparing
+    -- Subtraction in the Gameboy sets flags in the same way as comparison
     cmp n
-    a .= v - n
+    a .= a' - n
 
 bit :: Int -> Word8 -> State Registers ()
 bit n v = do
@@ -138,8 +138,8 @@ rl r = zoom cpu $ do
 
 byteOr :: Word8 -> State Registers ()
 byteOr n = do
-    v <- use a
-    let result = v .|. n
+    a' <- use a
+    let result = a' .|. n
 
     zero .= (result == 0)
     hcarry .= False
@@ -150,8 +150,8 @@ byteOr n = do
 
 xor :: Word8 -> State Registers ()
 xor n = do
-    v <- use a
-    let result = Bits.xor v n
+    a' <- use a
+    let result = Bits.xor a' n
 
     zero .= (result == 0)
     hcarry .= False
@@ -162,8 +162,8 @@ xor n = do
 
 byteAnd :: Word8 -> State Registers ()
 byteAnd n = do
-    v <- use a
-    let result = v .&. n
+    a' <- use a
+    let result = a' .&. n
 
     zero .= (result == 0)
     hcarry .= True

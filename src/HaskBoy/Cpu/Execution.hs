@@ -80,7 +80,7 @@ execute = \case
         Add r -> zoom (cpu.register) . add =<< use (cloneLens r)
 
         Sub r -> zoom (cpu.register) . sub =<< use (cloneLens r)
-        Sbc r -> sbc =<< use (cloneLens r)
+        Sbc r -> zoom (cpu.register) . sbc =<< use (cloneLens r)
 
         Bit n v -> zoom (cpu.register) (bit n v)
 
@@ -359,6 +359,8 @@ toInstruction = \case
         0x2F -> do
             cpu.tclock += 4
             pure Cpl
+
+        0x38 -> Jr <$> use (cpu.register.carry)
 
         0x77 -> do
             cpu.tclock += 8
