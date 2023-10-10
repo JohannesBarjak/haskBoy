@@ -4,7 +4,7 @@
 module HaskBoy.Cpu.Instructions
     ( inc, dec
     , byteAnd, xor, byteOr
-    , jr, call, ret
+    , jr, call, jmp, ret
     , cmp
     , add, sub, sbc
     , rl, bit
@@ -74,10 +74,13 @@ cmp n = do
 call :: Address -> State Emulator ()
 call nn = do
     pushStack =<< use (cpu.register.pc)
-    cpu.register.pc .= nn
+    jmp nn
+
+jmp :: Address -> State Emulator ()
+jmp nn = cpu.register.pc .= nn
 
 ret :: State Emulator ()
-ret = cpu.register.pc <~ popStack
+ret = jmp =<< popStack
 
 sbc :: Word8 -> State Registers ()
 sbc n = do
@@ -106,11 +109,9 @@ add n = do
 
 sub :: Word8 -> State Registers ()
 sub n = do
-    a' <- use a
-
     -- Subtraction in the Gameboy sets flags in the same way as comparison
     cmp n
-    a .= a' - n
+    a -= n
 
 bit :: Int -> Word8 -> State Registers ()
 bit n v = do
