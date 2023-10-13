@@ -50,17 +50,16 @@ dec r = do
     r .= result
 
 jr :: Bool -> State Emulator ()
-jr cond = do
-    if cond then do
-        pc' <- use (cpu.register.pc)
-        sb <- use (mmu.addr pc')
+jr jump = do
+    sb <- consumeByte
+    nn <- fromIntegral <$> use (cpu.register.pc)
 
-        cpu.register.pc .= fromIntegral (fromIntegral pc' + twoCompl sb + 1)
+    if jump then do
+        jmp $ fromIntegral (nn + twoCompl sb)
         traceM $ "signed byte: " ++ show (twoCompl sb)
         cpu.tclock += 12
-    else do
-        cpu.register.pc += 1 -- Consume byte
-        cpu.tclock += 8
+
+    else cpu.tclock += 8
 
 cmp :: Word8 -> State Registers ()
 cmp n = do
