@@ -39,12 +39,14 @@ drawTiles = do
 
     ppu.display .= writeTiles t dp
 
-writeTiles :: [[Tile]] -> Display -> Display
-writeTiles rows dp = runST $ do
+writeTiles :: [Tile] -> Display -> Display
+writeTiles ts dp = runST $ do
     mdp <- V.thaw dp
-    for_ (zip [0..] rows) $ \(y, row) -> do
-        for_ (zip [0..] row) $ \(x, tile) -> do
-            writeTile mdp (x * 8,y) tile
+    for_ (zip [0..] ts) $ \(i, tile) -> do
+        let x = (i `mod` 32) * 8
+        let y = (i `div` 32) * 8
+
+        writeTile mdp (x,y) tile
     V.freeze mdp
 
 writeTile :: VM.PrimMonad m => VM.MVector (VM.PrimState m) Pixel -> (Int, Int) -> Tile -> m ()
@@ -54,39 +56,47 @@ writeTile mdp (x,y) tile = do
             VM.write mdp (dpIndex (x + i) (y + j)) pixel
     where dpIndex i j = (j * 256) + i
 
-tiles :: State Mmu [[Tile]]
-tiles = traverse (traverse getTile) =<< tileMaps
+tiles :: State Mmu [Tile]
+tiles = traverse getTile =<< tileMaps
 
-tileMaps :: State Mmu [[Word8]]
-tileMaps = traverse sequence $ do
-    y <- [0..31]
-
-    pure $ do
-        x <- [0..31]
-        pure $ use (addr (0x9800 + (y * 32) + x))
+tileMaps :: State Mmu [Word8]
+tileMaps = sequence $ do
+    i <- [0..1023]
+    pure $ use (addr (0x9800 + i))
 
 -- | Get a tile using an index, which should come from one of the Gameboy's tilemaps
 getTile :: Word8 -> State Mmu Tile
-getTile tmIndex = mapM (fmap (uncurry tileRow) . tileBytes . (*2)) $ V.fromList [0..7]
+getTile tileIndex = do
+    bgtd <- use bgTileData
+    let tileAddress = if bgtd then
+            0x8000 + (fromIntegral tileIndex * 16)
+        else 0x9000 + (fromIntegral (twoCompl tileIndex) * 16)
+
+    mapM (fmap tileRow . tileBytes . (tileAddress +) . (*2)) $ V.fromList [0..7]
 
     where tileBytes :: Address -> State Mmu (Word8, Word8)
           tileBytes i = do
-            fstBits <- use (addr (si + i))
-            sndBits <- use (addr (si + i + 1))
+            fstBits <- use (addr i)
+            sndBits <- use (addr $ i + 1)
             pure (fstBits, sndBits)
 
-          si = 0x8000 + fromIntegral tmIndex
+twoCompl :: Word8 -> Int
+twoCompl r8
+    | r8 < 128  = fromIntegral r8
+    | otherwise = -(256 - fromIntegral r8)
 
 -- | Get a single tile row from a pair of bytes
 tileRow
-    :: Word8 -- ^ Lower bits
-    -> Word8 -- ^ Upper bits
+    ::
+    ( Word8 -- ^ Lower bits
+    , Word8 -- ^ Upper bits
+    )
     -> Vector Pixel
 
-tileRow v1 v2 = V.fromList $ zipWith toPixel (toBits v1) (toBits v2)
+tileRow (v1,v2) = V.fromList $ zipWith toPixel (toBits v1) (toBits v2)
 
     where toBits :: Word8 -> [Bool]
-          toBits v = [toEnum . fromIntegral $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
+          toBits v = [toBool $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
 
 ppumode :: Lens' Mmu Pixel
 ppumode = lens _ppumode $ \mmu' v ->
