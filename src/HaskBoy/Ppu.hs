@@ -2,6 +2,7 @@
 
 module HaskBoy.Ppu
     ( Ppu(..)
+    , PpuMode(..)
     , Pixel(..)
     , Color(..)
     , Display
@@ -13,7 +14,8 @@ import HaskBoy.Mmu (Mmu, raw)
 
 import Test.QuickCheck.Arbitrary
 
-import Control.Lens (makeLenses, use)
+import Control.Lens
+
 import Control.Monad.State.Strict (State)
 import Data.Vector (Vector)
 import Data.Bits (Bits((.&.), shiftR))
@@ -39,7 +41,7 @@ data Pixel
     | I3
     deriving (Bounded, Enum, Eq, Show)
 
-data PPUMode
+data PpuMode
     = HBlank
     | VBlank
     | OAMRead
