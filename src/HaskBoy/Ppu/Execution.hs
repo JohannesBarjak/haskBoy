@@ -14,6 +14,7 @@ import HaskBoy.Emulator
 
 import HaskBoy.Mmu
 import HaskBoy.Ppu
+import HaskBoy.BitOps
 
 import Control.Lens
 import Control.Monad.State.Strict
@@ -21,7 +22,7 @@ import Control.Monad.State.Strict
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 
-import Data.Bits
+import Data.Bits (Bits((.&.), shiftR, (.|.)))
 import Data.Word (Word8)
 import Foreign.Marshal (toBool)
 
@@ -116,13 +117,6 @@ ly :: Lens' Mmu Word8
 ly = raw 0xFF44
 
 bgTileData :: Lens' Mmu Bool
-bgTileData = lens (\mmu' -> takeBit (mmu'^.lcdc) 4) (\mmu' v -> mmu'&lcdc .~ assignBit (mmu'^.lcdc) 4 v)
+bgTileData = lens (^.lcdc.bit 4) (\mmu' v -> mmu'&lcdc.bit 4 .~ v)
     where lcdc :: Lens' Mmu Word8
           lcdc = raw 0xFF40
-
-takeBit :: Word8 -> Int -> Bool
-takeBit v i = toBool (shiftR v i)
-
-assignBit :: Word8 -> Int -> Bool -> Word8
-assignBit v i True  = v .|. (1 `shiftL` i)
-assignBit v i False = v .&. complement (1 `shiftL` i)
