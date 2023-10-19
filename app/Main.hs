@@ -36,6 +36,8 @@ import Control.Monad (when, forM_)
 import Debug.Trace (traceM)
 import Numeric (showHex)
 
+import Data.List (intercalate)
+
 hzps, fps, hzpf :: Integer
 hzps = 4194304
 fps  = 60
@@ -96,10 +98,12 @@ printCpuDbgInfo instr = do
     bcreg <- ("bc: " ++) . flip showHex "" <$> use (cpu.register.bc)
     dereg <- ("de: " ++) . flip showHex "" <$> use (cpu.register.de)
     hlreg <- ("hl: " ++) . flip showHex "" <$> use (cpu.register.hl)
+    spreg <- ("sp: " ++) . flip showHex "" <$> use (cpu.register.sp)
+    lyreg <- ("ly: " ++) . flip showHex "" <$> use (mmu.ly)
     let instruction = "instr: 0x" ++ showHex instr ""
 
-    traceM
-        $ address ++ " | " ++ afreg ++ " | " ++ bcreg ++ " | " ++ dereg ++ " | " ++ hlreg ++ " | " ++ instruction
+    traceM $
+        intercalate " | " [address, afreg, bcreg, dereg, hlreg, spreg, lyreg, instruction]
 
 emulatorLoop :: SDL.Renderer -> Emulator -> IO ()
 emulatorLoop renderer emulator = do
@@ -113,8 +117,8 @@ emulatorLoop renderer emulator = do
     let (pixels :: Ptr Word8) = castPtr pixelPtr
 
     forM_ [0..(256 * 256) - 1] $ \i -> do
-        forM_ [0..3] $ \j -> do
-            pokeElemOff pixels ((i * 4) + j) (rawdp V.! i)
+        forM_ [0..2] $ \j -> do
+            pokeElemOff pixels ((i * 3) + j) (rawdp V.! i)
 
     SDL.unlockTexture text
 
@@ -143,15 +147,6 @@ colorIndexToPixel ci = do
           ciToPixel DarkGray  = 85
           ciToPixel Black     = 0
 
-drawingExample :: SDL.Renderer -> IO ()
-drawingExample renderer = do
-    text <- gbTexture renderer
-    SDL.updateTexture text Nothing (BS.pack (replicate (256 * 256 * 4) 125)) 256
-    SDL.copy renderer text Nothing Nothing
-
 gbTexture :: SDL.Renderer -> IO SDL.Texture
 gbTexture renderer = SDL.createTexture
-    renderer SDL.RGB888 SDL.TextureAccessStreaming (SDL.V2 256 256)
-
-gbSurface :: IO SDL.Surface
-gbSurface = SDL.createRGBSurface (SDL.V2 256 256) SDL.RGBA8888
+    renderer SDL.RGB24 SDL.TextureAccessStreaming (SDL.V2 256 256)
