@@ -132,6 +132,10 @@ writeByte idx v mem = do
         EWRam1 _ -> mem
         OAM    _ -> mem
         NoUse  _ -> mem
-        IOReg  i -> mem&ioreg.ix i .~ v
+        IOReg  i -> let rdOnly = [0x44] in
+            if i `notElem` rdOnly then 
+                mem&ioreg.ix i .~ v
+            else mem
+
         HRam   i -> mem&hram.ix i .~ v
         Ie       -> mem&ie .~ v
