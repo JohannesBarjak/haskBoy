@@ -16,11 +16,11 @@ module HaskBoy.Cpu
     , twoCompl
     ) where
 
+import HaskBoy.BitOps
+
 import Data.Word (Word8, Word16)
 import Control.Lens
-import Data.Bits (Bits(shiftL, shiftR, complement), (.|.), (.&.))
-
-import Foreign.Marshal (toBool)
+import Data.Bits (Bits(shiftL, shiftR), (.|.), (.&.))
 
 data Cpu = Cpu
     { _register        :: Registers
@@ -96,25 +96,16 @@ _l :: Registers -> Word8
 _l Registers{_hl} = fromIntegral $ _hl .&. 0x00FF
 
 zero :: Lens' Registers Bool
-zero = lens (`readBit` 7) (`assignBit` 7)
+zero = flag.bit 7
 
 subOp :: Lens' Registers Bool
-subOp = lens (`readBit` 6) (`assignBit` 6)
+subOp = flag.bit 6
 
 hcarry :: Lens' Registers Bool
-hcarry = lens (`readBit` 5) (`assignBit` 5)
+hcarry = flag.bit 5
 
 carry :: Lens' Registers Bool
-carry = lens (`readBit` 4) (`assignBit` 4)
-
--- Read bit in flag register
-readBit :: Registers -> Int -> Bool
-readBit r i = toBool $ (r^.flag `shiftR` i) .&. 1
-
--- Assign bit in flag register
-assignBit :: Registers -> Int -> Bool -> Registers
-assignBit r i True  = r&flag .~ r^.flag .|. (1 `shiftL` i)
-assignBit r i False = r&flag .~ r^.flag .&. complement (1 `shiftL` i)
+carry = flag.bit 4
 
 -- | Convert byte into a signed 'Int' using two's complement
 twoCompl :: Word8 -> Int
