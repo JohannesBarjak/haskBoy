@@ -11,400 +11,500 @@ import HaskBoy.Cpu.Instructions
 import Control.Lens
 import Control.Monad.State.Strict
 
-import Data.Word (Word8)
-import Data.Bits (Bits((.&.), shiftR))
+import Data.Word (Word8, Word16)
+import Data.Bits (Bits((.&.), shiftR, complement))
 
-import Debug.Trace (trace, traceM)
 import Numeric (showHex)
 
-data Instruction = Nop
+data Instruction
+    = Nop
+    | Xor (ALens' Emulator Word8)
+    | Or (ALens' Emulator Word8)
+    | Cpl
+    | And Value
+    | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
+    | AHLI | HLIA
+    | AHLD | HLDA
+    | Store (ALens' Emulator Word8) Word8
+    | Store16 (ALens' Emulator Word16) Word16
+    | Inc (ALens' Emulator Word8)
+    | Inc16 (ALens' Registers Word16)
+    | Dec (ALens' Emulator Word8)
+    | Dec16 (ALens' Registers Word16)
+    | Add (ALens' Emulator Word8)
+    | Sub (ALens' Emulator Word8)
+    | Sbc (ALens' Emulator Word8)
+    | Bit Int Word8
+    | Cmp Word8
+    | Jmp Word16
+    | Jr Bool
+    | Push Word16
+    | Pop (ALens' Registers Word16)
+    | PopAF
+    | Call Word16
+    | Ret
+    | RetNZ
+    | EnableInterrupt
+    | DisableInterrupt
 
-execute :: Word8 -> State Emulator ()
+data Value
+    = Register (ALens' Cpu Word8)
+    | Address  (ALens' Mmu Word8)
+    | Byte Word8
+
+execute :: Instruction -> State Emulator ()
 execute = \case
-        0x00 -> cpu.tclock += 4
+        Nop  -> pure ()
 
-        0xAF -> do
-            xorA =<< use (cpu.register.a)
-            cpu.tclock += 4
+        Ld   lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
 
-        0x0A -> do
-            nn <- use (cpu.register.bc)
-            cpu.register.a <~ use (mmu.addr nn)
+        Store   r v -> cloneLens r .= v
+        Store16 r v -> cloneLens r .= v
 
-            cpu.tclock += 8
+        Xor r -> zoom (cpu.register) . xor =<< use (cloneLens r)
+        Or r -> zoom (cpu.register) . byteOr =<< use (cloneLens r)
 
-        0x1A -> do
-            nn <- use (cpu.register.de)
-            cpu.register.a <~ use (mmu.addr nn)
+        Cpl -> do
+            cpu.register.a %= complement
+            cpu.register.hcarry .= True
+            cpu.register.subOp .= True
 
-            cpu.tclock += 8
+        And (Byte v) -> zoom (cpu.register) (byteAnd v)
+        And (Register r) -> zoom (cpu.register) . byteAnd =<< use (cpu.cloneLens r)
+        And (Address v) -> zoom (cpu.register) . byteAnd =<< use (mmu.cloneLens v)
 
-        0x2A -> do
+        Inc r -> inc (cloneLens r)
+        Dec r -> dec (cloneLens r)
+        Dec16 r -> cpu.register.cloneLens r -= 1
+
+        Add r -> zoom (cpu.register) . add =<< use (cloneLens r)
+
+        Sub r -> zoom (cpu.register) . sub =<< use (cloneLens r)
+        Sbc r -> zoom (cpu.register) . sbc =<< use (cloneLens r)
+
+        Bit n v -> zoom (cpu.register) (bit n v)
+
+        AHLI -> do
             nn <- use (cpu.register.hl)
-
             cpu.register.a <~ use (mmu.addr nn)
+
             cpu.register.hl += 1
 
-            cpu.tclock += 8
-
-        0x3A -> do
+        AHLD -> do
             nn <- use (cpu.register.hl)
-
             cpu.register.a <~ use (mmu.addr nn)
+
             cpu.register.hl -= 1
 
-            cpu.tclock += 8
-
-        i | i .&. 0xC7 == 0x06 -> do
-            v <- consumeByte
-            cpu.tclock += 8
-
-            case extractOctalArg 3 i of
-                0 -> cpu.register.b .= v
-                1 -> cpu.register.c .= v
-                2 -> cpu.register.d .= v
-                3 -> cpu.register.e .= v
-                4 -> cpu.register.h .= v
-                5 -> cpu.register.l .= v
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    mmu.addr nn .= v
-
-                    cpu.tclock += 4
-
-                7 -> cpu.register.a .= v
-                _ -> error "`Impossible` error on assign byte to register"
-
-        i | i .&. 0xF8 == 0x40 -> do
-            cpu.tclock += 4
-            cpu.register.b <~ case extractOctalArg 0 i of
-                0 -> use (cpu.register.b)
-                1 -> use (cpu.register.c)
-                2 -> use (cpu.register.d)
-                3 -> use (cpu.register.e)
-                4 -> use (cpu.register.h)
-                5 -> use (cpu.register.l)
-
-                6 -> do
-                    cpu.tclock += 4
-
-                    nn <- use (cpu.register.hl)
-                    use (mmu.addr nn)
-
-                7 -> use (cpu.register.a)
-                _ -> error "`Impossible` error"
-
-
-        0x49 -> cpu.tclock += 4
-
-        0x4F -> zoom cpu $ do
-            register.c <~ use (register.a)
-            tclock += 4
-
-        0x02 -> do
-            nn <- use (cpu.register.bc)
-            v  <- use (cpu.register.a)
-
-            mmu.addr nn .= v
-
-            cpu.tclock += 8
-
-        0x12 -> do
-            nn <- use (cpu.register.de)
-            v  <- use (cpu.register.a)
-
-            mmu.addr nn .= v
-
-            cpu.tclock += 8
-
-        0x22 -> do
+        HLIA -> do
             nn <- use (cpu.register.hl)
-            v  <- use (cpu.register.a)
-
-            mmu.addr nn .= v
+            mmu.addr nn <~ use (cpu.register.a)
 
             cpu.register.hl += 1
-            cpu.tclock += 8
 
-        0x32 -> do
+        HLDA -> do
             nn <- use (cpu.register.hl)
-            v  <- use (cpu.register.a)
-
-            mmu.addr nn .= v
+            mmu.addr nn <~ use (cpu.register.a)
 
             cpu.register.hl -= 1
-            cpu.tclock += 8
 
-        0x03 -> zoom cpu $ do
-            register.bc += 1
-            tclock += 8
-        0x13 -> zoom cpu $ do
-            register.de += 1
-            tclock += 8
-        0x23 -> zoom cpu $ do
-            register.hl += 1
-            tclock += 8
-        0x33 -> zoom cpu $ do
-            register.sp += 1
-            tclock += 8
+        Inc16 r -> cpu.register.cloneLens r += 1
 
-        0x77 -> do
-            nn <- use (cpu.register.hl)
-            v  <- use (cpu.register.a)
+        Cmp v -> zoom (cpu.register) $ cmp v
 
-            mmu.addr nn .= v
+        Jr v -> jr v
+        Jmp v -> cpu.register.pc .= v
 
-            cpu.tclock += 8
+        Push v -> pushStack v
+        Pop r -> cpu.register.cloneLens r <~ popStack
 
-        0xE0 -> do
-            v <- fromIntegral <$> consumeByte
-            mmu.addr (0xFF00 + v) <~ use (cpu.register.a)
+        PopAF -> do
+            v <- use (cpu.register.flag)
+            cpu.register.af <~ popStack
+            cpu.register.flag .= v
 
-            cpu.tclock += 12
+        Call v -> call v
+        Ret -> ret
 
-        0xC9 -> do
-            ret
-            cpu.tclock += 16
+        RetNZ -> do
+            z <- use (cpu.register.zero)
 
-        0xCB -> consumeByte >>= \case
-            i | i .&. 0xF8 == 0x30 -> error "Unimplemented Instr"
-
-            0x7c -> do
-                bit 7 =<< use (cpu.register.h)
+            if z then
                 cpu.tclock += 8
-            0x11 -> do
-                rl c
-                cpu.tclock += 8
+            else do
+                cpu.tclock += 20
+                ret
 
-            arg  -> error $ "Invalid CB argument: " ++ showHex arg ""
+        EnableInterrupt -> cpu.interruptEnable .= True
+        DisableInterrupt -> cpu.interruptEnable .= False
 
-        0xC1 -> do
-            cpu.register.bc <~ (\x -> trace ("pop stack: 0x" ++ showHex x "") x) <$> popStack
-            cpu.tclock += 12
-
-        0xD1 -> do
-            cpu.register.de <~ popStack
-            cpu.tclock += 12
-
-        0xE1 -> do
-            cpu.register.hl <~ popStack
-            cpu.tclock += 12
-
-        0xC3 -> do
-            cpu.register.pc <~ consumeWord
-            cpu.tclock += 16
-
-        0xCD -> do
-            v <- consumeWord
-            call v
-            cpu.tclock += 24
-
-        0xC5 -> do
-            sp' <- use (cpu.register.sp)
-            traceM ("stack pointer: 0x" ++ showHex sp' "")
-            pushStack =<< use (cpu.register.bc)
-
-        0x17 -> do
-            rl a
+toInstruction :: Word8 -> State Emulator Instruction
+toInstruction = \case
+        0x00 -> do
             cpu.tclock += 4
-
-        0x18 -> jr True
-        0x20 -> jr . not =<< use (cpu.register.zero)
-        0x28 -> jr =<< use (cpu.register.zero)
+            pure Nop
 
         0x01 -> do
-            cpu.register.bc <~ consumeWord
             cpu.tclock += 12
+            Store16 (cpu.register.bc) <$> consumeWord
 
-        0x11 -> do
-            cpu.register.de <~ consumeWord
-            cpu.tclock += 12
-
-        0x21 -> do
-            cpu.register.hl <~ consumeWord
-            cpu.tclock += 12
-
-        0x31 -> do
-            cpu.register.sp <~ consumeWord
-            cpu.tclock += 12
-
-        0xE2 -> do
-            offset <- fromIntegral <$> use (cpu.register.c)
-            mmu.addr (0xFF00 + offset) <~ use (cpu.register.a)
-
+        0x02 -> do
             cpu.tclock += 8
+
+            nn <- use (cpu.register.bc)
+            pure (Ld (mmu.addr nn) (cpu.register.a))
+
+        0x03 -> do
+            cpu.tclock += 8
+            pure (Inc16 bc)
 
         i | i .&. 0xC7 == 0x04 -> do
             cpu.tclock += 4
 
-            case extractOctalArg 3 i of
-                0 -> inc (cpu.register.b)
-                1 -> inc (cpu.register.c)
-                2 -> inc (cpu.register.d)
-                3 -> inc (cpu.register.e)
-                4 -> inc (cpu.register.h)
-                5 -> inc (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    inc (mmu.addr nn)
-
+            r <- argToRegister (extractOctalArg 3 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
                     cpu.tclock += 8
+                    pure (mmu.r)
 
-                7 -> inc (cpu.register.a)
-                _ -> error "`Impossible` error"
+            pure (Inc r)
 
         i | i .&. 0xC7 == 0x05 -> do
             cpu.tclock += 4
 
-            case extractOctalArg 3 i of
-                0 -> dec (cpu.register.b)
-                1 -> dec (cpu.register.c)
-                2 -> dec (cpu.register.d)
-                3 -> dec (cpu.register.e)
-                4 -> dec (cpu.register.h)
-                5 -> dec (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    dec (mmu.addr nn)
-
+            r <- argToRegister (extractOctalArg 3 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
                     cpu.tclock += 8
+                    pure (mmu.r)
 
-                7 -> dec (cpu.register.a)
-                _ -> error "`Impossible` error with a dec instruction"
+            pure (Dec r)
+
+        i | i .&. 0xC7 == 0x06 -> do
+            cpu.tclock += 8
+
+            r <- argToRegister (extractOctalArg 3 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            Store r <$> consumeByte
+
+        0x0B -> do
+            cpu.tclock += 8
+            pure (Dec16 bc)
+
+        0x13 -> do
+            cpu.tclock += 8
+            pure (Inc16 de)
+
+        0x23 -> do
+            cpu.tclock += 8
+            pure (Inc16 hl)
+
+        0x33 -> do
+            cpu.tclock += 8
+            pure (Inc16 sp)
+
+        i | i .&. 0xF8 == 0x40 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
             
-        i | i .&. 0xF8 == 0x90 -> do
+            pure (Ld (cpu.register.b) r)
+
+        i | i .&. 0xF8 == 0x48 -> do
             cpu.tclock += 4
 
-            case extractOctalArg 0 i of
-                0 -> sub =<< use (cpu.register.b)
-                1 -> sub =<< use (cpu.register.c)
-                2 -> sub =<< use (cpu.register.d)
-                3 -> sub =<< use (cpu.register.e)
-                4 -> sub =<< use (cpu.register.h)
-                5 -> sub =<< use (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    sub =<< use (mmu.addr nn)
-
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
                     cpu.tclock += 4
+                    pure (mmu.r)
 
-                7 -> sub =<< use (cpu.register.a)
-                _ -> error "`Impossible` error"
-
-        i | i .&. 0xF8 == 0x78 -> do
-            cpu.tclock += 4
-
-            case extractOctalArg 0 i of
-                0 -> cpu.register.a <~ use (cpu.register.b)
-                1 -> cpu.register.a <~ use (cpu.register.c)
-                2 -> cpu.register.a <~ use (cpu.register.d)
-                3 -> cpu.register.a <~ use (cpu.register.e)
-                4 -> cpu.register.a <~ use (cpu.register.h)
-                5 -> cpu.register.a <~ use (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    cpu.register.a <~ use (mmu.addr nn)
-
-                    cpu.tclock += 4
-
-                7 -> cpu.register.a <~ use (cpu.register.a)
-                _ -> error "`Impossible` error"
-            
-        i | i .&. 0xF8 == 0x98 -> do
-            cpu.tclock += 4
-
-            sbc =<< case extractOctalArg 0 i of
-                0 -> use (cpu.register.b)
-                1 -> use (cpu.register.c)
-                2 -> use (cpu.register.d)
-                3 -> use (cpu.register.e)
-                4 -> use (cpu.register.h)
-                5 -> use (cpu.register.l)
-
-                6 -> do
-                    cpu.tclock += 4
-
-                    nn <- use (cpu.register.hl)
-                    use (mmu.addr nn)
-
-                7 -> use (cpu.register.a)
-                _ -> error "`Impossible` error"
+            pure (Ld (cpu.register.c) r)
 
         i | i .&. 0xF8 == 0x50 -> do
             cpu.tclock += 4
 
-            case extractOctalArg 0 i of
-                0 -> cpu.register.d <~ use (cpu.register.b)
-                1 -> cpu.register.d <~ use (cpu.register.c)
-                2 -> cpu.register.d <~ use (cpu.register.d)
-                3 -> cpu.register.d <~ use (cpu.register.e)
-                4 -> cpu.register.d <~ use (cpu.register.h)
-                5 -> cpu.register.d <~ use (cpu.register.l)
-
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    cpu.register.d <~ use (mmu.addr nn)
-
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
                     cpu.tclock += 4
+                    pure (mmu.r)
+            
+            pure (Ld (cpu.register.d) r)
 
-                7 -> cpu.register.d <~ use (cpu.register.a)
-                _ -> error "`impossible` error"
-
-        i | i .&. 0xF8 == 0x60 -> do
-            case extractOctalArg 0 i of
-                0 -> cpu.register.h <~ use (cpu.register.b)
-                1 -> cpu.register.h <~ use (cpu.register.c)
-                2 -> cpu.register.h <~ use (cpu.register.d)
-                3 -> cpu.register.h <~ use (cpu.register.e)
-                4 -> cpu.register.h <~ use (cpu.register.h)
-                5 -> cpu.register.h <~ use (cpu.register.l)
-                6 -> do
-                    nn <- use (cpu.register.hl)
-                    cpu.register.h <~ use (mmu.addr nn)
-                7 -> cpu.register.h <~ use (cpu.register.a)
-                _ -> error "`impossible` error"
-
-            case extractOctalArg 0 i of
-                6 -> cpu.tclock += 8
-                _ -> cpu.tclock += 4
-
-        0xEA -> do
-            nn <- consumeWord
-            mmu.addr nn <~ use (cpu.register.a)
-
-            cpu.tclock += 16
-
-        0xF0 -> do
-            v <- consumeByte
-            cpu.register.a <~ use (mmu.addr (0xFF00 + fromIntegral v))
-
-        0xBE -> do
-            nn <- use (cpu.register.hl)
-            cmp =<< use (mmu.addr nn)
-            cpu.tclock += 8
-
-        0x86 -> do
-            nn <- use (cpu.register.hl)
-            add =<< use (mmu.addr nn)
-            cpu.tclock += 8
-
-        0xF3 -> do
-            cpu.interruptEnable .= False
+        i | i .&. 0xF8 == 0x90 -> do
             cpu.tclock += 4
 
-        0xFE -> do
-            cmp =<< consumeByte
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Sub r)
+
+        i | i .&. 0xF8 == 0x98 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Sbc r)
+
+        i | i .&. 0xF8 == 0xA8 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Xor r)
+
+        i | i .&. 0xF8 == 0x60 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+            
+            pure (Ld (cpu.register.h) r)
+
+        i | i .&. 0xF8 == 0x78 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+            
+            pure (Ld (cpu.register.a) r)
+
+        0x12 -> do
             cpu.tclock += 8
+
+            nn <- use (cpu.register.de)
+            pure (Ld (mmu.addr nn) (cpu.register.a))
+
+        0x22 -> do
+            cpu.tclock += 8
+            pure HLIA
+
+        0x31 -> do
+            cpu.tclock += 12
+            Store16 (cpu.register.sp) <$> consumeWord
+
+        0x32 -> do
+            cpu.tclock += 8
+            pure HLDA
+
+        0x0A -> do
+            cpu.tclock += 8
+
+            nn <- use (cpu.register.bc)
+            pure (Ld (cpu.register.a) (mmu.addr nn))
+
+        0x1A -> do
+            cpu.tclock += 8
+
+            nn <- use (cpu.register.de)
+            pure (Ld (cpu.register.a) (mmu.addr nn))
+
+        0x2A -> do
+            cpu.tclock += 8
+            pure AHLI
+
+        0x3A -> do
+            cpu.tclock += 8
+            pure AHLD
+
+        i | i .&. 0xF8 == 0x86 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Add r)
+
+        0x18 -> pure (Jr True)
+        0x20 -> Jr . not <$> use (cpu.register.zero)
+        0x28 -> Jr <$> use (cpu.register.zero)
+
+        0x11 -> do
+            cpu.tclock += 12
+            Store16 (cpu.register.de) <$> consumeWord
+
+        0x21 -> do
+            cpu.tclock += 12
+            Store16 (cpu.register.hl) <$> consumeWord
+
+        0x2F -> do
+            cpu.tclock += 4
+            pure Cpl
+
+        0x38 -> Jr <$> use (cpu.register.carry)
+
+        0x77 -> do
+            cpu.tclock += 8
+
+            nn <- use (cpu.register.hl)
+            pure (Ld (mmu.addr nn) (cpu.register.a))
+
+        i | i .&. 0xF8 == 0x80 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Add r)
+
+        i | i .&. 0xF8 == 0xA0 -> do
+            cpu.tclock += 4
+
+            argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure . And $ Register (register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (And . Address $ r)
+
+        i | i .&. 0xF8 == 0xB0 -> do
+            cpu.tclock += 4
+
+            r <- argToRegister (extractOctalArg 0 i) >>= \case
+                Right r -> pure (cpu.register.r)
+                Left  r -> do
+                    cpu.tclock += 4
+                    pure (mmu.r)
+
+            pure (Or r)
+
+        0xC0 -> pure RetNZ
+
+        0xC1 -> do
+            cpu.tclock += 12
+            pure (Pop bc)
+
+        0xC3 -> do
+            cpu.tclock += 16
+            Jmp <$> consumeWord
+
+        0xC5 -> do
+            cpu.tclock += 16
+            Push <$> use (cpu.register.bc)
+
+        0xC9 -> do
+            cpu.tclock += 16
+            pure Ret
+
+        0xCB -> consumeByte >>= \case
+            0x7C -> do
+                cpu.tclock += 8
+                Bit 7 <$> use (cpu.register.h)
+
+            arg -> error $ "Invalid CB argument: " ++ showHex arg ""
+
+        0xCD -> do
+            cpu.tclock += 24
+            Call <$> consumeWord
+
+        0xE0 -> do
+            cpu.tclock += 12
+
+            v <- fromIntegral <$> consumeByte
+            pure (Ld (mmu.addr (0xFF00 + v)) (cpu.register.a))
+
+        0xE1 -> do
+            cpu.tclock += 12
+            pure (Pop hl)
+
+        0xE2 -> do
+            cpu.tclock += 8
+            v <- fromIntegral <$> use (cpu.register.c)
+            pure (Ld (mmu.addr (0xFF00 + v)) (cpu.register.a))
+
+        0xE5 -> do
+            cpu.tclock += 16
+            Push <$> use (cpu.register.hl)
+
+        0xE6 -> do
+            cpu.tclock += 8
+            And . Byte <$> consumeByte
+
+        0xEA -> do
+            cpu.tclock += 16
+
+            v <- consumeWord
+            pure (Ld (mmu.addr v) (cpu.register.a))
+
+        0xF0 -> do
+            cpu.tclock += 12
+
+            v <- fromIntegral <$> consumeByte
+            pure (Ld (cpu.register.a) (mmu.addr (0xFF00 + v)))
+
+        0xF1 -> do
+            cpu.tclock += 12
+            pure PopAF
+
+        0xF3 -> do
+            cpu.tclock += 4
+            pure DisableInterrupt
+
+        0xF5 -> do
+            cpu.tclock += 16
+            Push <$> use (cpu.register.af)
+
+        0xFA -> do
+            cpu.tclock += 16
+
+            v <- consumeWord
+            pure (Ld (cpu.register.a) (mmu.addr v))
+
+        0xFB -> do
+            cpu.tclock += 4
+            pure EnableInterrupt
+
+        0xFE -> do
+            cpu.tclock += 8
+            Cmp <$> consumeByte
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
+argToRegister :: Word8 -> State Emulator (Either (ALens' Mmu Word8) (ALens' Registers Word8))
+argToRegister 0 = pure $ Right b
+argToRegister 1 = pure $ Right c
+argToRegister 2 = pure $ Right d
+argToRegister 3 = pure $ Right e
+argToRegister 4 = pure $ Right h
+argToRegister 5 = pure $ Right l
+
+argToRegister 6 = do
+    nn <- use (cpu.register.hl)
+    pure $ Left (addr nn)
+
+argToRegister 7 = pure $ Right a
+argToRegister _ = undefined
+
 extractOctalArg :: (Bits a, Num a) => Int -> a -> a
 extractOctalArg i v = shiftR v i .&. 7
-
-halfCarry :: (Bits a, Num a) => a -> a -> Bool
-halfCarry v1 v2 = (((v1 .&. 0x0F) + (v2 .&. 0x0F)) .&. 0x10) == 0x10

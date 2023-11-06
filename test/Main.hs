@@ -5,7 +5,7 @@ import HaskBoy.Emulator
 import HaskBoy.Mmu
 
 import HaskBoy.Cpu
-import Cpu.Instructions
+import HaskBoy.Cpu.Instructions
 
 import HaskBoy.Ppu
 import HaskBoy.Ppu.Execution
@@ -97,7 +97,7 @@ testRegisters = do
         it "writes a value to 8bit registers and checks write integrity" $
             property $ \v -> all (v ==) (evalState (writeToRegisters v brs) testCpu)
 
-    where writeToRegisters :: a -> [ALens' Register a] -> State Cpu [a]
+    where writeToRegisters :: a -> [ALens' Registers a] -> State Cpu [a]
           writeToRegisters v rs = do
             for_ (map cloneLens rs) $ \r -> do
                 register.r .= v
@@ -111,10 +111,10 @@ testTileRow :: Spec
 testTileRow =
     describe "tileRow" $ do
         it "always returns even enums when the first byte is zero" $
-            property $ \v -> all (even . fromEnum) (tileRow 0 v)
+            property $ \v -> all (even . fromEnum) (tileRow (0,v))
 
         it "always returns odd enums when the first byte is 0xFF" $
-            property $ \v -> all (odd . fromEnum) (tileRow 0xFF v)
+            property $ \v -> all (odd . fromEnum) (tileRow (0xFF,v))
 
 testGetTile :: Spec
 testGetTile =
@@ -147,7 +147,7 @@ testMmu = Mmu
 
 testCpu :: Cpu
 testCpu = Cpu
-    { _register = Register
+    { _register = Registers
         { _af = 0x01B0
         , _bc = 0x0013
         , _de = 0x00D8
@@ -155,6 +155,7 @@ testCpu = Cpu
         , _pc = 0x0000
         , _sp = 0xFFFE
         }
+    , _interruptEnable = True
     , _tclock = 0
     }
 

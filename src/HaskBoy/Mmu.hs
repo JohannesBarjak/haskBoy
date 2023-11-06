@@ -10,15 +10,9 @@ module HaskBoy.Mmu
 
 import Control.Lens
 
-import Control.Monad.State.Strict
-
-import Data.Vector (Vector)
 import Data.Sequence
 import Data.Word (Word8, Word16)
 import Data.Bits
-
-import Debug.Trace (trace)
-import Numeric (showHex)
 
 import Data.Ix (Ix(inRange))
 
@@ -138,6 +132,10 @@ writeByte idx v mem = do
         EWRam1 _ -> mem
         OAM    _ -> mem
         NoUse  _ -> mem
-        IOReg  i -> mem&ioreg.ix i .~ v
+        IOReg  i -> let rdOnly = [0x44] in
+            if i `notElem` rdOnly then 
+                mem&ioreg.ix i .~ v
+            else mem
+
         HRam   i -> mem&hram.ix i .~ v
         Ie       -> mem&ie .~ v

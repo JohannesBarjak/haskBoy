@@ -1,9 +1,10 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 
 module HaskBoy.Cpu.Instructions
     ( inc, dec
-    , xorA
-    , jr, call, ret
+    , byteAnd, xor, byteOr
+    , jr, call, jmp, ret
     , cmp
     , add, sub, sbc
     , rl, bit
@@ -18,7 +19,8 @@ import HaskBoy.Cpu
 import Debug.Trace (traceM)
 
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits(xor, (.&.), shiftL))
+import Data.Bits (Bits((.&.), (.|.), shiftL))
+import Data.Bits qualified as Bits
 
 import Control.Monad.State.Strict
 import Control.Lens
@@ -27,96 +29,96 @@ import Foreign.Marshal.Utils (fromBool, toBool)
 
 inc :: Lens' Emulator Word8 -> State Emulator ()
 inc r = do
-    cpu.register.hcarry <~ (== 0xF) . (.&. 0xF) <$> use r
+    v <- use r
+    let result = v + 1
 
-    r += 1
-
-    cpu.register.zero <~ not . toBool <$> use r
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= (v .&. 0xF == 0xF)
     cpu.register.subOp .= False
+
+    r .= result
 
 dec :: Lens' Emulator Word8 -> State Emulator ()
 dec r = do
-    cpu.register.hcarry <~ not . toBool . (.&. 0xF) <$> use r
+    v <- use r
+    let result = v - 1
 
-    r -= 1
-
-    cpu.register.zero <~ not . toBool <$> use r
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= (v .&. 0xF == 0)
     cpu.register.subOp .= True
 
-jr :: Bool -> State Emulator ()
-jr cond = do
-    if cond then do
-        pc' <- use (cpu.register.pc)
-        sb <- use (mmu.addr pc')
+    r .= result
 
-        cpu.register.pc .= fromIntegral (fromIntegral pc' + twoCompl sb + 1)
+jr :: Bool -> State Emulator ()
+jr jump = do
+    sb <- consumeByte
+    nn <- fromIntegral <$> use (cpu.register.pc)
+
+    if jump then do
+        jmp $ fromIntegral (nn + twoCompl sb)
         traceM $ "signed byte: " ++ show (twoCompl sb)
         cpu.tclock += 12
-    else do
-        cpu.register.pc += 1 -- Consume byte
-        cpu.tclock += 8
 
-cmp :: Word8 -> State Emulator ()
+    else cpu.tclock += 8
+
+cmp :: Word8 -> State Registers ()
 cmp n = do
-    v <- use (cpu.register.a)
+    a' <- use a
 
-    cpu.register.zero   .= (v == n)
-    cpu.register.carry  .= (v < n)
-    cpu.register.hcarry .= (v .&. 0xF < n .&. 0xF)
-    cpu.register.subOp  .= True
+    zero .= (a' == n)
+    carry .= (a' < n)
+    hcarry .= (a' .&. 0xF < n .&. 0xF)
+    subOp .= True
 
 call :: Address -> State Emulator ()
 call nn = do
     pushStack =<< use (cpu.register.pc)
-    cpu.register.pc .= nn
+    jmp nn
+
+jmp :: Address -> State Emulator ()
+jmp nn = cpu.register.pc .= nn
 
 ret :: State Emulator ()
-ret = do
-    v <- popStack
-    cpu.register.pc .= v
+ret = jmp =<< popStack
 
-sbc :: Word8 -> State Emulator ()
-sbc v = zoom cpu $ do
-    a' <- use (register.a)
-    oldCarry <- use (register.carry)
-    let n = v + fromIntegral (fromEnum oldCarry)
+sbc :: Word8 -> State Registers ()
+sbc n = do
+    a' <- use a
+    carry' <- use carry
+    let result = a' - n + fromBool carry'
 
-    register.a .= (a' - n)
+    zero .= (result == 0)
+    hcarry .= (a' .&. 0xF < (n .&. 0xF) + fromBool carry')
+    carry .= (fromIntegral a' < (fromIntegral n + fromBool carry' :: Int))
+    subOp .= True
 
-    register.carry .= (a' < n)
-    register.hcarry .= ((v .&. 0xF) + fromIntegral (fromEnum oldCarry) > a' .&. 0xF)
-    register.zero <~ (use (register.a) <&> (== 0))
-    register.subOp .= True
+    a .= result
 
-add :: Word8 -> State Emulator ()
-add v = zoom cpu $ do
-    a' <- use (register.a)
-    register.hcarry .= ((a' .&. 0xF) +  (v .&. 0xF) > 0xF)
-    register.carry .= (fromIntegral a' + fromIntegral v > (0xFF :: Int))
+add :: Word8 -> State Registers ()
+add n = do
+    a' <- use a
+    let result = a' + n
 
-    register.a .= (a' + v)
+    zero .= (result == 0)
+    hcarry .= ((a' .&. 0xF) + (n .&. 0xF) > 0xF)
+    carry .= (fromIntegral a' + fromIntegral n > (0xFF :: Int))
+    subOp .= False
 
-    register.zero <~ (use (register.a) <&> (== 0))
-    register.subOp .= False
+    a .= result
 
-sub :: Word8 -> State Emulator ()
-sub v = zoom cpu $ do
-    a' <- use (register.a)
-    register.carry .= (v > a')
-    register.hcarry .= (v .&. 0xF > a' .&. 0xF)
+sub :: Word8 -> State Registers ()
+sub n = do
+    -- Subtraction in the Gameboy sets flags in the same way as comparison
+    cmp n
+    a -= n
 
-    register.a .= (a' - v)
+bit :: Int -> Word8 -> State Registers ()
+bit n v = do
+    zero .= (v .&. shiftL 1 n == 0)
+    hcarry .= True
+    subOp .= False
 
-    register.zero <~ (use (register.a) <&> (== 0))
-    register.subOp .= True
-
-bit :: Int -> Word8 -> State Emulator ()
-bit n v = zoom cpu $ do
-    register.zero .= (v .&. shiftL 1 n == 0)
-    register.hcarry .= True
-    register.subOp .= False
-
-rl :: Lens' Register Word8 -> State Emulator ()
+rl :: Lens' Registers Word8 -> State Emulator ()
 rl r = zoom cpu $ do
     oldCarry <- use (register.carry)
 
@@ -134,16 +136,41 @@ rl r = zoom cpu $ do
             v <- use (register.r)
             pure $ toBool (v .&. (1 `shiftL` 7))
 
--- Xor register A
-xorA :: Word8 -> State Emulator ()
-xorA v = zoom cpu $ do
-    register.a %= xor v
+byteOr :: Word8 -> State Registers ()
+byteOr n = do
+    a' <- use a
+    let result = a' .|. n
 
-    register.hcarry .= False
-    register.carry  .= False
-    register.subOp  .= False
+    zero .= (result == 0)
+    hcarry .= False
+    carry .= False
+    subOp .= False
 
-    register.zero <~ not . toBool <$> use (register.a)
+    a .= result
+
+xor :: Word8 -> State Registers ()
+xor n = do
+    a' <- use a
+    let result = Bits.xor a' n
+
+    zero .= (result == 0)
+    hcarry .= False
+    carry .= False
+    subOp .= False
+
+    a .= result
+
+byteAnd :: Word8 -> State Registers ()
+byteAnd n = do
+    a' <- use a
+    let result = a' .&. n
+
+    zero .= (result == 0)
+    hcarry .= True
+    carry .= False
+    subOp .= False
+
+    a .= result
 
 -- Read the current and following byte as a 16-bit word
 -- and then increase the pc register by 2
