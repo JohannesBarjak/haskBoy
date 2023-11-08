@@ -26,8 +26,8 @@ import HaskBoy.Ppu.Execution
 import Control.Monad.State.Strict
 import Control.Lens
 
-import Data.Vector qualified as V
-import Data.Vector (Vector)
+import Data.Vector (Vector, (!))
+
 import Foreign (castPtr, Storable (pokeElemOff), Ptr)
 import Data.Bits
 
@@ -63,7 +63,7 @@ main = do
     filename <- head <$> getArgs
     (Just rom) <- toMemory <$> loadRom filename
 
-    emulatorLoop renderer (initialEmulator rom)
+    emulatorLoop renderer (initialEmulator rom) 0
 
     SDL.destroyRenderer renderer
     SDL.destroyWindow window
@@ -105,12 +105,22 @@ printCpuDbgInfo instr = do
     traceM $
         intercalate " | " [address, afreg, bcreg, dereg, hlreg, spreg, lyreg, instruction]
 
-emulatorLoop :: SDL.Renderer -> Emulator -> IO ()
-emulatorLoop renderer emulator = do
-    start <- SDL.Raw.getTicks
+emulatorLoop :: SDL.Renderer -> Emulator -> Integer -> IO ()
+emulatorLoop renderer emulator cycles = do
+    start <- SDL.Raw.getPerformanceCounter
 
-    let (rawdp, emulator') = runState (cycleCpu hzpf *> drawTiles *> rawDisplay) emulator
+    let (rawdp, emulator') = runState (cycleCpu cycles *> drawTiles *> rawDisplay) emulator
+    renderGbDisplay rawdp renderer
 
+    end <- SDL.Raw.getPerformanceCounter
+    freq <- SDL.Raw.getPerformanceFrequency
+
+    emulatorLoop renderer emulator' (newCycles end start freq)
+
+    where newCycles end start freq = round (fromIntegral hzps * (fromIntegral (end - start) / fromIntegral freq) :: Double)
+
+renderGbDisplay :: Vector Word8 -> SDL.Renderer -> IO ()
+renderGbDisplay dp renderer = do
     text <- gbTexture renderer
     (pixelPtr, _) <- SDL.lockTexture text Nothing
 
@@ -118,21 +128,12 @@ emulatorLoop renderer emulator = do
 
     forM_ [0..(256 * 256) - 1] $ \i -> do
         forM_ [0..2] $ \j -> do
-            pokeElemOff pixels ((i * 3) + j) (rawdp V.! i)
+            pokeElemOff pixels ((i * 3) + j) (dp ! i)
 
     SDL.unlockTexture text
 
     SDL.copy renderer text Nothing Nothing
     SDL.present renderer
-
-    end <- SDL.Raw.getTicks
-
-    let time = fromIntegral $ end - start
-
-    when (time < frameTime) $ do
-        SDL.delay $ round (frameTime - time)
-
-    emulatorLoop renderer emulator'
 
 rawDisplay :: State Emulator (Vector Word8)
 rawDisplay = mapM colorIndexToPixel =<< use (ppu.display)
