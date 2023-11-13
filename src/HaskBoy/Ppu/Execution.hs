@@ -1,7 +1,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 
 module HaskBoy.Ppu.Execution
-    ( drawTiles, writeTiles
+    ( drawTiles
     , tiles, tileMaps
     , getTile, tileRow
     , scx, scy
@@ -22,47 +22,47 @@ import Control.Monad.State.Strict
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 
+import Data.Sequence (Seq)
+import Data.Sequence qualified as Seq
+
 import Data.Bits (Bits((.&.), shiftR, (.|.)))
 import Data.Word (Word8)
 import Foreign.Marshal (toBool)
 
-import Data.Foldable (for_)
-
-import Control.Monad.ST
-import Data.Vector.Mutable qualified as VM
-
-type Tile = Vector (Vector Pixel)
+type Tiles = Seq Tile
+type Tile = Seq (Seq Pixel)
 
 drawTiles :: State Emulator ()
 drawTiles = do
-    t <- zoom mmu tiles
-    dp <- use (ppu.display)
+    ts <- zoom mmu tiles
 
-    ppu.display .= writeTiles t dp
+    scrollX <- use (mmu.scx)
+    scrollY <- use (mmu.scy)
+    lineY <- use (mmu.ly)
 
-writeTiles :: [Tile] -> Display -> Display
-writeTiles ts dp = runST $ do
-    mdp <- V.thaw dp
-    for_ (zip [0..] ts) $ \(i, tile) -> do
-        let x = (i `mod` 32) * 8
-        let y = (i `div` 32) * 8
+    ppu.display.ix (fromIntegral lineY) .= bgScanline (scrollX, scrollY, lineY) ts
 
-        writeTile mdp (x,y) tile
-    V.freeze mdp
+bgScanline :: (Word8, Word8, Word8) -> Tiles -> Seq Pixel
+bgScanline (scrollX, scrollY, lineY) = bgScx scrollX . bgLy (scrollY + lineY)
 
-writeTile :: VM.PrimMonad m => VM.MVector (VM.PrimState m) Pixel -> (Int, Int) -> Tile -> m ()
-writeTile mdp (x,y) tile = do
-    for_ (V.indexed tile) $ \(j, row) -> do
-        for_ (V.indexed row) $ \(i, pixel) -> do
-            VM.write mdp (dpIndex (x + i) (y + j)) pixel
-    where dpIndex i j = (j * 256) + i
+bgScx :: Word8 -> Seq Pixel -> Seq Pixel
+bgScx scrollX bgScan
+    = if Seq.length bgEnd >= 160 then
+        Seq.take 160 bgEnd else undefined
 
-tiles :: State Mmu [Tile]
+    where bgEnd = Seq.drop (fromIntegral scrollX) bgScan
+
+-- 'Y' is scy + ly whenever ly < 144
+bgLy :: Word8 -> Tiles -> Seq Pixel
+bgLy y ts = (`Seq.index` rowIndex) =<< Seq.index (Seq.chunksOf 32 ts) tileIndex
+    where (tileIndex, rowIndex) = (y `quotRem` 8)&both %~ fromIntegral
+
+tiles :: State Mmu Tiles
 tiles = traverse getTile =<< tileMaps
 
-tileMaps :: State Mmu [Word8]
+tileMaps :: State Mmu (Seq Word8)
 tileMaps = sequence $ do
-    i <- [0..1023]
+    i <- Seq.fromList [0..1023]
     pure $ use (addr (0x9800 + i))
 
 -- | Get a tile using an index, which should come from one of the Gameboy's tilemaps
@@ -73,7 +73,7 @@ getTile tileIndex = do
             0x8000 + (fromIntegral tileIndex * 16)
         else 0x9000 + (fromIntegral (twoCompl tileIndex) * 16)
 
-    mapM (fmap tileRow . tileBytes . (tileAddress +) . (*2)) $ V.fromList [0..7]
+    mapM (fmap tileRow . tileBytes . (tileAddress +) . (*2)) $ Seq.fromList [0..7]
 
     where tileBytes :: Address -> State Mmu (Word8, Word8)
           tileBytes i = do
@@ -92,12 +92,12 @@ tileRow
     ( Word8 -- ^ Lower bits
     , Word8 -- ^ Upper bits
     )
-    -> Vector Pixel
+    -> Seq Pixel
 
-tileRow (v1,v2) = V.fromList $ zipWith toPixel (toBits v1) (toBits v2)
+tileRow (v1,v2) = Seq.zipWith toPixel (toBits v1) (toBits v2)
 
-    where toBits :: Word8 -> [Bool]
-          toBits v = [toBool $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
+    where toBits :: Word8 -> Seq Bool
+          toBits v = Seq.fromList $ [toBool $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
 
 ppumode :: Lens' Mmu Pixel
 ppumode = lens _ppumode $ \mmu' v ->

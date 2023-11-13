@@ -17,10 +17,10 @@ import Test.QuickCheck.Arbitrary
 import Control.Lens
 
 import Control.Monad.State.Strict (State)
-import Data.Vector (Vector)
+import Data.Sequence (Seq)
 import Data.Bits (Bits((.&.), shiftR))
 
-type Display = Vector Pixel
+type Display = Seq (Seq Pixel)
 
 data Ppu = Ppu
     { _display :: Display -- ^ Gameboy's 256x256 logical display

@@ -18,7 +18,6 @@ import HaskBoy.Ppu
     )
 
 import Data.Word (Word8)
-import Data.Vector qualified as V
 import Data.Sequence qualified as Seq
 
 import Control.Lens
@@ -71,6 +70,6 @@ initialCpu = Cpu
 
 initialPpu :: Ppu
 initialPpu = Ppu
-    { _display = V.fromList $ replicate (256 * 256) (toPixel False False)
+    { _display = Seq.replicate 144 $ Seq.replicate 160 (toPixel False False)
     , _clock   = 0
     }

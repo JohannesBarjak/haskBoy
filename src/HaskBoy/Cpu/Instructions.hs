@@ -56,7 +56,6 @@ jr jump = do
 
     if jump then do
         jmp $ fromIntegral (nn + twoCompl sb)
-        traceM $ "signed byte: " ++ show (twoCompl sb)
         cpu.tclock += 12
 
     else cpu.tclock += 8
