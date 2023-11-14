@@ -33,11 +33,6 @@ import Data.Bits
 
 import Control.Monad (when, forM_, join)
 
-import Debug.Trace (traceM)
-import Numeric (showHex)
-
-import Data.List (intercalate)
-
 hzps, fps, hzpf :: Integer
 hzps = 4194304
 fps  = 60
@@ -90,15 +85,18 @@ cycleCpu cycles
             ppu.clock -= 456
             mmu.ly += 1
 
+            lineY <- use (mmu.ly)
+            when (lineY < 144) drawTiles
+
         cycleCpu (cycles - instrCost)
 
 emulatorLoop :: SDL.Renderer -> Emulator -> Integer -> IO ()
 emulatorLoop renderer emulator cycles = do
-    events <- SDL.pollEvents
+    _ <- SDL.pollEvents
 
     start <- SDL.Raw.getPerformanceCounter
 
-    let (rawdp, emulator') = runState (cycleCpu cycles *> drawTiles *> rawDisplay) emulator
+    let (rawdp, emulator') = runState (cycleCpu cycles *> rawDisplay) emulator
     renderGbDisplay rawdp renderer
 
     end <- SDL.Raw.getPerformanceCounter
