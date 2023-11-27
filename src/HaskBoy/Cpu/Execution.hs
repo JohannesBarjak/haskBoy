@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 
-module HaskBoy.Cpu.Execution where
+module HaskBoy.Cpu.Execution (execute, toInstruction) where
 
 import HaskBoy.Emulator
 
@@ -15,13 +15,14 @@ import Data.Word (Word8, Word16)
 import Data.Bits (Bits((.&.), shiftR, complement))
 
 import Numeric (showHex)
+import Control.Monad (when)
 
 data Instruction
     = Nop
     | Xor (ALens' Emulator Word8)
     | Or (ALens' Emulator Word8)
     | Cpl
-    | And Value
+    | And ByteSource
     | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
     | AHLI | HLIA
     | AHLD | HLDA
@@ -42,27 +43,30 @@ data Instruction
     | Pop (ALens' Registers Word16)
     | PopAF
     | Call Word16
-    | Ret
-    | RetNZ
+    | Ret (Maybe Condition)
     | EnableInterrupt
     | DisableInterrupt
 
-data Value
+data Condition
+    = Z | NZ
+    | C | NC
+
+data ByteSource
     = Register (ALens' Cpu Word8)
     | Address  (ALens' Mmu Word8)
     | Byte Word8
 
 execute :: Instruction -> State Emulator ()
 execute = \case
-        Nop  -> pure ()
+        Nop -> pure ()
 
-        Ld   lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
+        Ld lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
 
         Store   r v -> cloneLens r .= v
         Store16 r v -> cloneLens r .= v
 
         Xor r -> zoom (cpu.register) . xor =<< use (cloneLens r)
-        Or r -> zoom (cpu.register) . byteOr =<< use (cloneLens r)
+        Or r  -> zoom (cpu.register) . byteOr =<< use (cloneLens r)
 
         Cpl -> do
             cpu.register.a %= complement
@@ -124,19 +128,28 @@ execute = \case
             cpu.register.flag .= v
 
         Call v -> call v
-        Ret -> ret
 
-        RetNZ -> do
-            z <- use (cpu.register.zero)
+        Ret mk -> do
+            cpu.tclock += 8
 
-            if z then
-                cpu.tclock += 8
-            else do
-                cpu.tclock += 20
-                ret
+            case mk of
+                Just k  -> do
+                    cpu.tclock += 12
+
+                    zoom cpu (condition k)
+                        >>= flip when ret
+                Nothing -> do
+                    cpu.tclock += 8
+                    ret
 
         EnableInterrupt -> cpu.interruptEnable .= True
         DisableInterrupt -> cpu.interruptEnable .= False
+
+condition :: Condition -> State Cpu Bool
+condition  C = use (register.carry)
+condition NC = not <$> use (register.carry)
+condition  Z = use (register.zero)
+condition NZ = not <$> use (register.zero)
 
 toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
@@ -399,7 +412,7 @@ toInstruction = \case
 
             pure (Or r)
 
-        0xC0 -> pure RetNZ
+        0xC0 -> pure $ Ret (Just NZ)
 
         0xC1 -> do
             cpu.tclock += 12
@@ -415,7 +428,7 @@ toInstruction = \case
 
         0xC9 -> do
             cpu.tclock += 16
-            pure Ret
+            pure (Ret Nothing)
 
         0xCB -> consumeByte >>= \case
             0x7C -> do
@@ -427,6 +440,9 @@ toInstruction = \case
         0xCD -> do
             cpu.tclock += 24
             Call <$> consumeWord
+
+        0xD0 -> do
+            pure $ Ret (Just NC)
 
         0xE0 -> do
             cpu.tclock += 12
