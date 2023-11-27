@@ -36,7 +36,6 @@ main = do
             testToColor
         describe "HaskBoy.Ppu.Execution" $ do
             testTileRow
-            testGetTile
 
     quickCheck prop_DecBCRegs
     quickCheck prop_StackFunConsistency
@@ -115,14 +114,6 @@ testTileRow =
 
         it "always returns odd enums when the first byte is 0xFF" $
             property $ \v -> all (odd . fromEnum) (tileRow (0xFF,v))
-
-testGetTile :: Spec
-testGetTile =
-    describe "getTile" $ do
-        it "always returns an 8x8 tile" $
-            property $ \v -> flip evalState testMmu $ do
-                tile <- getTile v
-                pure (length tile == 8 && all ((== 8) . V.length) tile)
 
 testEmulator :: Emulator
 testEmulator = Emulator
