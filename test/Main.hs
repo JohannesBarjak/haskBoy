@@ -152,7 +152,7 @@ testCpu = Cpu
 
 testPpu :: Ppu
 testPpu = Ppu
-    { _display = V.replicate (256 * 256) (toPixel False False)
+    { _display = Seq.replicate 256 . Seq.replicate 256 $ (toPixel False False)
     , _clock   = 0
     }
 
