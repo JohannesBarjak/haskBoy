@@ -1,4 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DataKinds       #-}
+{-# LANGUAGE LambdaCase      #-}
 
 module HaskBoy.Cpu.Execution (execute, toInstruction) where
 
@@ -13,6 +15,7 @@ import Control.Monad.State.Strict
 
 import Data.Word (Word8, Word16)
 import Data.Bits (Bits((.&.), shiftR, complement))
+import Data.Mod
 
 import Numeric (showHex)
 import Control.Monad (when)
@@ -55,6 +58,12 @@ data ByteSource
     = Register (ALens' Cpu Word8)
     | Address  (ALens' Mmu Word8)
     | Byte Word8
+
+data Opcode = Opcode Word8 (Maybe OpcodeArg)
+
+data OpcodeArg
+    = ByteReg (Mod 8)
+    | WordReg (Mod 4)
 
 execute :: Instruction -> State Emulator ()
 execute = \case
@@ -506,6 +515,9 @@ toInstruction = \case
             Cmp <$> consumeByte
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
+
+toOpcode 0x00 = Opcode 0x00 Nothing
+toOpcode 0x01 = Opcode 0x01 $ Just (WordReg 1)
 
 argToRegister :: Word8 -> State Emulator (Either (ALens' Mmu Word8) (ALens' Registers Word8))
 argToRegister 0 = pure $ Right b

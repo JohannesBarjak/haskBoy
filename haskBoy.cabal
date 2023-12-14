@@ -59,6 +59,7 @@ library
                     , containers^>=0.6.7
                     , lens      ^>=5.2.2
                     , QuickCheck^>=2.14.2
+                    , mod       ^>=0.2.0.1
 
     ghc-options: -Wall
     hs-source-dirs: src
