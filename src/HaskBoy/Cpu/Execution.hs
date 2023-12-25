@@ -27,6 +27,7 @@ data Instruction
     | Cpl
     | And ByteSource
     | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
+    | Ld' ByteSource ByteSource
     | AHLI | HLIA
     | AHLD | HLDA
     | Store (ALens' Emulator Word8) Word8
@@ -66,6 +67,21 @@ execute = \case
         Nop -> pure ()
 
         Ld lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
+
+        Ld' lhs rhs -> do
+            tcycle 4
+
+            case lhs of
+                Register lr -> do
+                    case rhs of
+                        Register rr -> cpu.cloneLens lr <~ use (cpu.cloneLens rr)
+                        Address v -> do
+                            tcycle 4
+                            cpu.cloneLens lr <~ use (mmu.cloneLens v)
+                Address v -> do
+                    tcycle 4
+                    case rhs of
+                        Register r -> mmu.cloneLens v <~ use (cpu.cloneLens r)
 
         Store   r v -> cloneLens r .= v
         Store16 r v -> cloneLens r .= v
@@ -241,6 +257,10 @@ toInstruction = \case
             cpu.tclock += 8
             pure (Dec16 bc)
 
+        0x2B -> do
+            cpu.tclock += 8
+            pure (Dec16 hl)
+
         0x13 -> do
             cpu.tclock += 8
             pure (Inc16 de)
@@ -285,6 +305,13 @@ toInstruction = \case
                     pure (mmu.r)
             
             pure (Ld (cpu.register.d) r)
+
+        i | i .&. 0xF8 == 0x58 -> Ld' (Register $ register.e) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x68 -> Ld' (Register $ register.l) <$> argToByteSource (extractOctalArg 0 i)
+
+        i | i .&. 0xF8 == 0x70 -> do
+            v <- use (cpu.register.hl)
+            Ld' (Address $ addr v) <$> argToByteSource (extractOctalArg 0 i)
 
         i | i .&. 0xF8 == 0x90 -> do
             cpu.tclock += 4
@@ -471,6 +498,11 @@ toInstruction = \case
             Push <$> use (cpu.register.hl)
 
         0xE6 -> And . Byte <$> consumeByte
+
+        0xE9 -> do
+            cpu.tclock += 4
+            av <- use (cpu.register.hl)
+            pure (Jmp av)
 
         0xEA -> do
             cpu.tclock += 16
