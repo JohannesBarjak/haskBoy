@@ -22,8 +22,8 @@ import Control.Monad (when)
 
 data Instruction
     = Nop
-    | Xor (ALens' Emulator Word8)
-    | Or (ALens' Emulator Word8)
+    | Xor ByteSource
+    | Or ByteSource
     | Cpl
     | And ByteSource
     | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
@@ -59,6 +59,8 @@ data ByteSource
     | Address  (ALens' Mmu Word8)
     | Byte Word8
 
+makePrisms ''ByteSource
+
 execute :: Instruction -> State Emulator ()
 execute = \case
         Nop -> pure ()
@@ -68,17 +70,42 @@ execute = \case
         Store   r v -> cloneLens r .= v
         Store16 r v -> cloneLens r .= v
 
-        Xor r -> zoom (cpu.register) . xor =<< use (cloneLens r)
-        Or r  -> zoom (cpu.register) . byteOr =<< use (cloneLens r)
+        Xor bs -> do
+            tcycle 4
 
+            case bs of
+                Byte v -> tcycle 4 *> xor v
+                Register r -> xor =<< use (cpu.cloneLens r)
+
+                Address v -> do
+                    tcycle 4
+                    xor =<< use (mmu.cloneLens v)
+
+        Or bs -> do
+            tcycle 4
+
+            case bs of
+                Byte v -> tcycle 4 *> byteOr v
+                Register r -> byteOr =<< use (cpu.cloneLens r)
+
+                Address v -> do
+                    tcycle 4
+                    byteOr =<< use (mmu.cloneLens v)
         Cpl -> do
             cpu.register.a %= complement
             cpu.register.hcarry .= True
             cpu.register.subOp .= True
 
-        And (Byte v) -> zoom (cpu.register) (byteAnd v)
-        And (Register r) -> zoom (cpu.register) . byteAnd =<< use (cpu.cloneLens r)
-        And (Address v) -> zoom (cpu.register) . byteAnd =<< use (mmu.cloneLens v)
+        And bs -> do
+            tcycle 4
+
+            case bs of
+                Byte v -> do tcycle 4 *> byteAnd v
+                Register r -> byteAnd =<< use (cpu.cloneLens r)
+
+                Address v -> do
+                    tcycle 4
+                    byteAnd =<< use (mmu.cloneLens v)
 
         Inc r -> inc (cloneLens r)
         Dec r -> dec (cloneLens r)
@@ -147,6 +174,9 @@ execute = \case
 
         EnableInterrupt -> cpu.interruptEnable .= True
         DisableInterrupt -> cpu.interruptEnable .= False
+
+tcycle :: Integer -> State Emulator ()
+tcycle v = cpu.tclock += v
 
 condition :: Condition -> State Cpu Bool
 condition  C = use (register.carry)
@@ -278,16 +308,7 @@ toInstruction = \case
 
             pure (Sbc r)
 
-        i | i .&. 0xF8 == 0xA8 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-
-            pure (Xor r)
+        i | i .&. 0xF8 == 0xA8 -> do Xor <$> argToByteSource (extractOctalArg 0 i)
 
         i | i .&. 0xF8 == 0x60 -> do
             cpu.tclock += 4
@@ -395,25 +416,8 @@ toInstruction = \case
 
             pure (Add r)
 
-        i | i .&. 0xF8 == 0xA0 -> do
-            cpu.tclock += 4
-
-            argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure . And $ Register (register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (And . Address $ r)
-
-        i | i .&. 0xF8 == 0xB0 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-
-            pure (Or r)
+        i | i .&. 0xF8 == 0xA0 -> And <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0xB0 -> Or <$> argToByteSource (extractOctalArg 0 i)
 
         0xC0 -> pure $ Ret (Just NZ)
 
@@ -466,9 +470,7 @@ toInstruction = \case
             cpu.tclock += 16
             Push <$> use (cpu.register.hl)
 
-        0xE6 -> do
-            cpu.tclock += 8
-            And . Byte <$> consumeByte
+        0xE6 -> And . Byte <$> consumeByte
 
         0xEA -> do
             cpu.tclock += 16
@@ -524,6 +526,21 @@ argToRegister 6 = do
 
 argToRegister 7 = pure $ Right a
 argToRegister _ = undefined
+
+argToByteSource :: Word8 -> State Emulator ByteSource
+argToByteSource 0 = pure $ Register (register.b)
+argToByteSource 1 = pure $ Register (register.c)
+argToByteSource 2 = pure $ Register (register.d)
+argToByteSource 3 = pure $ Register (register.e)
+argToByteSource 4 = pure $ Register (register.h)
+argToByteSource 5 = pure $ Register (register.l)
+
+argToByteSource 6 = do
+    nn <- use (cpu.register.hl)
+    pure $ Address (addr nn)
+
+argToByteSource 7 = pure $ Register (register.a)
+argToByteSource _ = undefined
 
 extractOctalArg :: (Bits a, Num a) => Int -> a -> a
 extractOctalArg i v = shiftR v i .&. 7

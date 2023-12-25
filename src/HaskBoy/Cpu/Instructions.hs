@@ -135,41 +135,41 @@ rl r = zoom cpu $ do
             v <- use (register.r)
             pure $ toBool (v .&. (1 `shiftL` 7))
 
-byteOr :: Word8 -> State Registers ()
+byteOr :: Word8 -> State Emulator ()
 byteOr n = do
-    a' <- use a
+    a' <- use (cpu.register.a)
     let result = a' .|. n
 
-    zero .= (result == 0)
-    hcarry .= False
-    carry .= False
-    subOp .= False
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= False
+    cpu.register.carry .= False
+    cpu.register.subOp .= False
 
-    a .= result
+    cpu.register.a .= result
 
-xor :: Word8 -> State Registers ()
+xor :: Word8 -> State Emulator ()
 xor n = do
-    a' <- use a
+    a' <- use (cpu.register.a)
     let result = Bits.xor a' n
 
-    zero .= (result == 0)
-    hcarry .= False
-    carry .= False
-    subOp .= False
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= False
+    cpu.register.carry .= False
+    cpu.register.subOp .= False
 
-    a .= result
+    cpu.register.a .= result
 
-byteAnd :: Word8 -> State Registers ()
+byteAnd :: Word8 -> State Emulator ()
 byteAnd n = do
-    a' <- use a
+    a' <- use (cpu.register.a)
     let result = a' .&. n
 
-    zero .= (result == 0)
-    hcarry .= True
-    carry .= False
-    subOp .= False
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= True
+    cpu.register.carry .= False
+    cpu.register.subOp .= False
 
-    a .= result
+    cpu.register.a .= result
 
 -- Read the current and following byte as a 16-bit word
 -- and then increase the pc register by 2
