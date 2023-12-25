@@ -59,12 +59,6 @@ data ByteSource
     | Address  (ALens' Mmu Word8)
     | Byte Word8
 
-data Opcode = Opcode Word8 (Maybe OpcodeArg)
-
-data OpcodeArg
-    = ByteReg (Mod 8)
-    | WordReg (Mod 4)
-
 execute :: Instruction -> State Emulator ()
 execute = \case
         Nop -> pure ()
@@ -515,9 +509,6 @@ toInstruction = \case
             Cmp <$> consumeByte
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
-
-toOpcode 0x00 = Opcode 0x00 Nothing
-toOpcode 0x01 = Opcode 0x01 $ Just (WordReg 1)
 
 argToRegister :: Word8 -> State Emulator (Either (ALens' Mmu Word8) (ALens' Registers Word8))
 argToRegister 0 = pure $ Right b
