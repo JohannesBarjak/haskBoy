@@ -69,17 +69,17 @@ execute = \case
         Ld lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
 
         Ld' lhs rhs -> do
-            tcycle 4
+            mcycle 1
 
             case lhs of
                 Register lr -> do
                     case rhs of
                         Register rr -> cpu.cloneLens lr <~ use (cpu.cloneLens rr)
                         Address v -> do
-                            tcycle 4
+                            mcycle 1
                             cpu.cloneLens lr <~ use (mmu.cloneLens v)
                 Address v -> do
-                    tcycle 4
+                    mcycle 1
                     case rhs of
                         Register r -> mmu.cloneLens v <~ use (cpu.cloneLens r)
 
@@ -87,25 +87,25 @@ execute = \case
         Store16 r v -> cloneLens r .= v
 
         Xor bs -> do
-            tcycle 4
+            mcycle 1
 
             case bs of
-                Byte v -> tcycle 4 *> xor v
+                Byte v -> mcycle 1 *> xor v
                 Register r -> xor =<< use (cpu.cloneLens r)
 
                 Address v -> do
-                    tcycle 4
+                    mcycle 1
                     xor =<< use (mmu.cloneLens v)
 
         Or bs -> do
-            tcycle 4
+            mcycle 1
 
             case bs of
-                Byte v -> tcycle 4 *> byteOr v
+                Byte v -> mcycle 1 *> byteOr v
                 Register r -> byteOr =<< use (cpu.cloneLens r)
 
                 Address v -> do
-                    tcycle 4
+                    mcycle 1
                     byteOr =<< use (mmu.cloneLens v)
         Cpl -> do
             cpu.register.a %= complement
@@ -113,14 +113,14 @@ execute = \case
             cpu.register.subOp .= True
 
         And bs -> do
-            tcycle 4
+            mcycle 1
 
             case bs of
-                Byte v -> do tcycle 4 *> byteAnd v
+                Byte v -> do mcycle 1 *> byteAnd v
                 Register r -> byteAnd =<< use (cpu.cloneLens r)
 
                 Address v -> do
-                    tcycle 4
+                    mcycle 1
                     byteAnd =<< use (mmu.cloneLens v)
 
         Inc r -> inc (cloneLens r)
@@ -191,8 +191,8 @@ execute = \case
         EnableInterrupt -> cpu.interruptEnable .= True
         DisableInterrupt -> cpu.interruptEnable .= False
 
-tcycle :: Integer -> State Emulator ()
-tcycle v = cpu.tclock += v
+mcycle :: Integer -> State Emulator ()
+mcycle v = cpu.tclock += (v * 4)
 
 condition :: Condition -> State Cpu Bool
 condition  C = use (register.carry)
