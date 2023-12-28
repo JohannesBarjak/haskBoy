@@ -36,7 +36,7 @@ data Instruction
     | Dec ByteSource
     | Dec16 (ALens' Registers Word16)
     | Add ByteSource
-    | Sub (ALens' Emulator Word8)
+    | Sub ByteSource
     | Sbc (ALens' Emulator Word8)
     | Bit Int Word8
     | Cmp Word8
@@ -129,7 +129,11 @@ execute = \case
                 Address av -> mcycle 1 *> (add =<< use (mmu.cloneLens av))
                 Byte v -> mcycle 1 *> add v
 
-        Sub r -> zoom (cpu.register) . sub =<< use (cloneLens r)
+        Sub bs -> mcycle 1 *> case bs of
+            Register r -> sub =<< use (cpu.cloneLens r)
+            Address av -> mcycle 1 *> (sub =<< use (mmu.cloneLens av))
+            Byte v -> mcycle 1 *> sub v
+
         Sbc r -> zoom (cpu.register) . sbc =<< use (cloneLens r)
 
         Bit n v -> zoom (cpu.register) (bit n v)
@@ -293,17 +297,7 @@ toInstruction = \case
         i | i .&. 0xF8 == 0x70 -> do
             v <- use (cpu.register.hl)
             Ld' (Address $ addr v) <$> argToByteSource (extractOctalArg 0 i)
-
-        i | i .&. 0xF8 == 0x90 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-
-            pure (Sub r)
+        i | i .&. 0xF8 == 0x90 -> Sub <$> argToByteSource (extractOctalArg 0 i)
 
         i | i .&. 0xF8 == 0x98 -> do
             cpu.tclock += 4
@@ -438,8 +432,8 @@ toInstruction = \case
             cpu.tclock += 24
             Call <$> consumeWord
 
-        0xD0 -> do
-            pure $ Ret (Just NC)
+        0xD0 -> pure $ Ret (Just NC)
+        0xD6 -> Sub . Byte <$> consumeByte
 
         0xE0 -> do
             cpu.tclock += 12

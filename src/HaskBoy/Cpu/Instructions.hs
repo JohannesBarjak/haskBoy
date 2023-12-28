@@ -103,11 +103,11 @@ add n = do
 
     cpu.register.a .= result
 
-sub :: Word8 -> State Registers ()
+sub :: Word8 -> State Emulator ()
 sub n = do
     -- Subtraction in the Gameboy sets flags in the same way as comparison
-    cmp n
-    a -= n
+    zoom (cpu.register) $ cmp n
+    cpu.register.a -= n
 
 bit :: Int -> Word8 -> State Registers ()
 bit n v = do
