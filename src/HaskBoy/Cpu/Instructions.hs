@@ -16,8 +16,6 @@ import HaskBoy.Emulator
 import HaskBoy.Mmu
 import HaskBoy.Cpu
 
-import Debug.Trace (traceM)
-
 import Data.Word (Word8, Word16)
 import Data.Bits (Bits((.&.), (.|.), shiftL))
 import Data.Bits qualified as Bits
@@ -93,7 +91,7 @@ sbc n = do
 
     a .= result
 
-add :: Word8 -> State Registers ()
+add :: Word8 -> State Emulator ()
 add n = do
     a' <- use a
     let result = a' + n
