@@ -78,18 +78,18 @@ jmp nn = cpu.register.pc .= nn
 ret :: State Emulator ()
 ret = jmp =<< popStack
 
-sbc :: Word8 -> State Registers ()
+sbc :: Word8 -> State Emulator ()
 sbc n = do
-    a' <- use a
-    carry' <- use carry
+    a' <- use (cpu.register.a)
+    carry' <- use (cpu.register.carry)
     let result = a' - n + fromBool carry'
 
-    zero .= (result == 0)
-    hcarry .= (a' .&. 0xF < (n .&. 0xF) + fromBool carry')
-    carry .= (fromIntegral a' < (fromIntegral n + fromBool carry' :: Int))
-    subOp .= True
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= (a' .&. 0xF < (n .&. 0xF) + fromBool carry')
+    cpu.register.carry .= (fromIntegral a' < (fromIntegral n + fromBool carry' :: Int))
+    cpu.register.subOp .= True
 
-    a .= result
+    cpu.register.a .= result
 
 add :: Word8 -> State Emulator ()
 add n = do
