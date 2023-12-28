@@ -427,6 +427,7 @@ toInstruction = \case
 
         0xD0 -> pure $ Ret (Just NC)
         0xD6 -> Sub . Byte <$> consumeByte
+        0xDE -> Sbc . Byte <$> consumeByte
 
         0xE0 -> do
             cpu.tclock += 12
