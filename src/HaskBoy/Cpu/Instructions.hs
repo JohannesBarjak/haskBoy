@@ -27,27 +27,27 @@ import Control.Lens
 
 import Foreign.Marshal.Utils (fromBool, toBool)
 
-inc :: Lens' Emulator Word8 -> State Emulator ()
+inc :: ALens' Emulator Word8 -> State Emulator ()
 inc r = do
-    v <- use r
+    v <- use (cloneLens r)
     let result = v + 1
 
     cpu.register.zero .= (result == 0)
     cpu.register.hcarry .= (v .&. 0xF == 0xF)
     cpu.register.subOp .= False
 
-    r .= result
+    cloneLens r .= result
 
-dec :: Lens' Emulator Word8 -> State Emulator ()
+dec :: ALens' Emulator Word8 -> State Emulator ()
 dec r = do
-    v <- use r
+    v <- use (cloneLens r)
     let result = v - 1
 
     cpu.register.zero .= (result == 0)
     cpu.register.hcarry .= (v .&. 0xF == 0)
     cpu.register.subOp .= True
 
-    r .= result
+    cloneLens r .= result
 
 jr :: Bool -> State Emulator ()
 jr jump = do

@@ -18,7 +18,6 @@ import Data.Bits (Bits((.&.), shiftR, complement))
 import Data.Mod
 
 import Numeric (showHex)
-import Control.Monad (when)
 
 data Instruction
     = Nop
@@ -32,9 +31,9 @@ data Instruction
     | AHLD | HLDA
     | Store (ALens' Emulator Word8) Word8
     | Store16 (ALens' Emulator Word16) Word16
-    | Inc (ALens' Emulator Word8)
+    | Inc ByteSource
     | Inc16 (ALens' Registers Word16)
-    | Dec (ALens' Emulator Word8)
+    | Dec ByteSource
     | Dec16 (ALens' Registers Word16)
     | Add (ALens' Emulator Word8)
     | Sub (ALens' Emulator Word8)
@@ -60,7 +59,14 @@ data ByteSource
     | Address  (ALens' Mmu Word8)
     | Byte Word8
 
+data WordSource
+    = Register16 (ALens' Cpu Word16)
+    | Address16  (ALens' Mmu Word16)
+    | Word Word16
+
 makePrisms ''ByteSource
+makePrisms ''WordSource
+makePrisms ''Instruction
 
 execute :: Instruction -> State Emulator ()
 execute = \case
@@ -86,45 +92,36 @@ execute = \case
         Store   r v -> cloneLens r .= v
         Store16 r v -> cloneLens r .= v
 
-        Xor bs -> do
-            mcycle 1
-
-            case bs of
-                Byte v -> mcycle 1 *> xor v
+        Xor bs -> mcycle 1 *> case bs of
                 Register r -> xor =<< use (cpu.cloneLens r)
+                Address v -> mcycle 1 *> (xor =<< use (mmu.cloneLens v))
+                Byte v -> mcycle 1 *> xor v
 
-                Address v -> do
-                    mcycle 1
-                    xor =<< use (mmu.cloneLens v)
-
-        Or bs -> do
-            mcycle 1
-
-            case bs of
-                Byte v -> mcycle 1 *> byteOr v
+        Or bs -> mcycle 1 *> case bs of
                 Register r -> byteOr =<< use (cpu.cloneLens r)
+                Address v -> mcycle 1 *> (byteOr =<< use (mmu.cloneLens v))
+                Byte v -> mcycle 1 *> byteOr v
 
-                Address v -> do
-                    mcycle 1
-                    byteOr =<< use (mmu.cloneLens v)
         Cpl -> do
             cpu.register.a %= complement
             cpu.register.hcarry .= True
             cpu.register.subOp .= True
 
-        And bs -> do
-            mcycle 1
-
-            case bs of
-                Byte v -> do mcycle 1 *> byteAnd v
+        And bs -> mcycle 1 *> case bs of
                 Register r -> byteAnd =<< use (cpu.cloneLens r)
+                Address v -> mcycle 1 *> (byteAnd =<< use (mmu.cloneLens v))
+                Byte v -> do mcycle 1 *> byteAnd v
 
-                Address v -> do
-                    mcycle 1
-                    byteAnd =<< use (mmu.cloneLens v)
+        Inc bs -> mcycle 1 *> case bs of
+                Register r -> inc (cpu.r)
+                Address av -> mcycle 2 *> inc (mmu.av)
+                _ -> pure ()
 
-        Inc r -> inc (cloneLens r)
-        Dec r -> dec (cloneLens r)
+        Dec bs -> mcycle 1 *> case bs of
+                Register r -> dec (cpu.r)
+                Address av -> mcycle 2 *> dec (mmu.av)
+                _ -> pure ()
+
         Dec16 r -> cpu.register.cloneLens r -= 1
 
         Add r -> zoom (cpu.register) . add =<< use (cloneLens r)
@@ -220,27 +217,8 @@ toInstruction = \case
             cpu.tclock += 8
             pure (Inc16 bc)
 
-        i | i .&. 0xC7 == 0x04 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 3 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 8
-                    pure (mmu.r)
-
-            pure (Inc r)
-
-        i | i .&. 0xC7 == 0x05 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 3 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 8
-                    pure (mmu.r)
-
-            pure (Dec r)
+        i | i .&. 0xC7 == 0x04 -> Inc <$> argToByteSource (extractOctalArg 3 i)
+        i | i .&. 0xC7 == 0x05 -> Dec <$> argToByteSource (extractOctalArg 3 i)
 
         i | i .&. 0xC7 == 0x06 -> do
             cpu.tclock += 8
