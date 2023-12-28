@@ -93,15 +93,15 @@ sbc n = do
 
 add :: Word8 -> State Emulator ()
 add n = do
-    a' <- use a
+    a' <- use (cpu.register.a)
     let result = a' + n
 
-    zero .= (result == 0)
-    hcarry .= ((a' .&. 0xF) + (n .&. 0xF) > 0xF)
-    carry .= (fromIntegral a' + fromIntegral n > (0xFF :: Int))
-    subOp .= False
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= ((a' .&. 0xF) + (n .&. 0xF) > 0xF)
+    cpu.register.carry .= (fromIntegral a' + fromIntegral n > (0xFF :: Int))
+    cpu.register.subOp .= False
 
-    a .= result
+    cpu.register.a .= result
 
 sub :: Word8 -> State Registers ()
 sub n = do

@@ -404,17 +404,6 @@ toInstruction = \case
             nn <- use (cpu.register.hl)
             pure (Ld (mmu.addr nn) (cpu.register.a))
 
-        i | i .&. 0xF8 == 0x80 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-
-            pure (Add r)
-
         i | i .&. 0xF8 == 0xA0 -> And <$> argToByteSource (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0xB0 -> Or <$> argToByteSource (extractOctalArg 0 i)
 
