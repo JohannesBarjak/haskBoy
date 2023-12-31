@@ -29,7 +29,6 @@ data Instruction
     | Ld' ByteSource ByteSource
     | AHLI | HLIA
     | AHLD | HLDA
-    | Store (ALens' Emulator Word8) Word8
     | Store16 (ALens' Emulator Word16) Word16
     | Inc ByteSource
     | Inc16 (ALens' Registers Word16)
@@ -74,22 +73,17 @@ execute = \case
 
         Ld lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
 
-        Ld' lhs rhs -> do
-            mcycle 1
-
-            case lhs of
+        Ld' lhs rhs -> mcycle 1 *> case lhs of
                 Register lr -> do
                     case rhs of
                         Register rr -> cpu.cloneLens lr <~ use (cpu.cloneLens rr)
-                        Address v -> do
+                        Address av -> do
                             mcycle 1
-                            cpu.cloneLens lr <~ use (mmu.cloneLens v)
-                Address v -> do
-                    mcycle 1
-                    case rhs of
+                            cpu.cloneLens lr <~ use (mmu.cloneLens av)
+                        Byte v -> mcycle 1 *> (cpu.cloneLens lr .= v)
+                Address v -> mcycle 1 *> case rhs of
                         Register r -> mmu.cloneLens v <~ use (cpu.cloneLens r)
 
-        Store   r v -> cloneLens r .= v
         Store16 r v -> cloneLens r .= v
 
         Xor bs -> mcycle 1 *> case bs of
@@ -230,16 +224,9 @@ toInstruction = \case
         i | i .&. 0xC7 == 0x04 -> Inc <$> argToByteSource (extractOctalArg 3 i)
         i | i .&. 0xC7 == 0x05 -> Dec <$> argToByteSource (extractOctalArg 3 i)
 
-        i | i .&. 0xC7 == 0x06 -> do
-            cpu.tclock += 8
-
-            r <- argToRegister (extractOctalArg 3 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-
-            Store r <$> consumeByte
+        i | i .&. 0xC7 == 0x06 -> Ld'
+            <$> argToByteSource (extractOctalArg 3 i)
+            <*> fmap Byte consumeByte
 
         0x0B -> do
             cpu.tclock += 8
@@ -261,71 +248,22 @@ toInstruction = \case
             cpu.tclock += 8
             pure (Inc16 sp)
 
-        i | i .&. 0xF8 == 0x40 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-            
-            pure (Ld (cpu.register.b) r)
-
-        i | i .&. 0xF8 == 0x48 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-
-            pure (Ld (cpu.register.c) r)
-
-        i | i .&. 0xF8 == 0x50 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-            
-            pure (Ld (cpu.register.d) r)
-
+        i | i .&. 0xF8 == 0x40 -> Ld' (Register $ register.b) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x48 -> Ld' (Register $ register.c) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x50 -> Ld' (Register $ register.d) <$> argToByteSource (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0x58 -> Ld' (Register $ register.e) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x60 -> Ld' (Register $ register.h) <$> argToByteSource (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0x68 -> Ld' (Register $ register.l) <$> argToByteSource (extractOctalArg 0 i)
 
         i | i .&. 0xF8 == 0x70 -> do
             v <- use (cpu.register.hl)
             Ld' (Address $ addr v) <$> argToByteSource (extractOctalArg 0 i)
 
+        i | i .&. 0xF8 == 0x78 -> Ld' (Register $ register.a) <$> argToByteSource (extractOctalArg 0 i)
+
         i | i .&. 0xF8 == 0x90 -> Sub <$> argToByteSource (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0x98 -> Sbc <$> argToByteSource (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0xA8 -> Xor <$> argToByteSource (extractOctalArg 0 i)
-
-        i | i .&. 0xF8 == 0x60 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-            
-            pure (Ld (cpu.register.h) r)
-
-        i | i .&. 0xF8 == 0x78 -> do
-            cpu.tclock += 4
-
-            r <- argToRegister (extractOctalArg 0 i) >>= \case
-                Right r -> pure (cpu.register.r)
-                Left  r -> do
-                    cpu.tclock += 4
-                    pure (mmu.r)
-            
-            pure (Ld (cpu.register.a) r)
 
         0x12 -> do
             cpu.tclock += 8
@@ -494,21 +432,6 @@ toInstruction = \case
             Cmp <$> consumeByte
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
-
-argToRegister :: Word8 -> State Emulator (Either (ALens' Mmu Word8) (ALens' Registers Word8))
-argToRegister 0 = pure $ Right b
-argToRegister 1 = pure $ Right c
-argToRegister 2 = pure $ Right d
-argToRegister 3 = pure $ Right e
-argToRegister 4 = pure $ Right h
-argToRegister 5 = pure $ Right l
-
-argToRegister 6 = do
-    nn <- use (cpu.register.hl)
-    pure $ Left (addr nn)
-
-argToRegister 7 = pure $ Right a
-argToRegister _ = undefined
 
 argToByteSource :: Word8 -> State Emulator ByteSource
 argToByteSource 0 = pure $ Register (register.b)
