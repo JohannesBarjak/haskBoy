@@ -56,7 +56,6 @@ data Condition
 data ByteSource
     = Register (ALens' Cpu Word8)
     | Address  (ALens' Mmu Word8)
-    | Byte Word8
 
 data WordSource
     = Register16 (ALens' Cpu Word16)
@@ -69,7 +68,7 @@ makePrisms ''Instruction
 
 execute :: Instruction -> State Emulator ()
 execute = \case
-        Nop -> pure ()
+        Nop -> mcycle 1
 
         Ld lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
 
@@ -80,21 +79,19 @@ execute = \case
                         Address av -> do
                             mcycle 1
                             cpu.cloneLens lr <~ use (mmu.cloneLens av)
-                        Byte v -> mcycle 1 *> (cpu.cloneLens lr .= v)
                 Address v -> mcycle 1 *> case rhs of
                         Register r -> mmu.cloneLens v <~ use (cpu.cloneLens r)
+                        Address av -> mmu.cloneLens v <~ use (mmu.cloneLens av)
 
         Store16 r v -> cloneLens r .= v
 
         Xor bs -> mcycle 1 *> case bs of
                 Register r -> xor =<< use (cpu.cloneLens r)
                 Address v -> mcycle 1 *> (xor =<< use (mmu.cloneLens v))
-                Byte v -> mcycle 1 *> xor v
 
         Or bs -> mcycle 1 *> case bs of
                 Register r -> byteOr =<< use (cpu.cloneLens r)
                 Address v -> mcycle 1 *> (byteOr =<< use (mmu.cloneLens v))
-                Byte v -> mcycle 1 *> byteOr v
 
         Cpl -> do
             cpu.register.a %= complement
@@ -104,29 +101,24 @@ execute = \case
         And bs -> mcycle 1 *> case bs of
                 Register r -> byteAnd =<< use (cpu.cloneLens r)
                 Address v -> mcycle 1 *> (byteAnd =<< use (mmu.cloneLens v))
-                Byte v -> do mcycle 1 *> byteAnd v
 
         Inc bs -> mcycle 1 *> case bs of
                 Register r -> inc (cpu.r)
                 Address av -> mcycle 2 *> inc (mmu.av)
-                _ -> pure ()
 
         Dec bs -> mcycle 1 *> case bs of
                 Register r -> dec (cpu.r)
                 Address av -> mcycle 2 *> dec (mmu.av)
-                _ -> pure ()
 
         Dec16 r -> cpu.register.cloneLens r -= 1
 
         Add bs -> mcycle 1 *> case bs of
                 Register r -> add =<< use (cpu.cloneLens r)
                 Address av -> mcycle 1 *> (add =<< use (mmu.cloneLens av))
-                Byte v -> mcycle 1 *> add v
 
         Sub bs -> mcycle 1 *> case bs of
             Register r -> sub =<< use (cpu.cloneLens r)
             Address av -> mcycle 1 *> (sub =<< use (mmu.cloneLens av))
-            Byte v -> mcycle 1 *> sub v
 
         Sbc v -> mcycle 1 *> case v of
             Register r -> sbc =<< use (cpu.cloneLens r)
@@ -203,9 +195,7 @@ condition NZ = not <$> use (register.zero)
 
 toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
-        0x00 -> do
-            cpu.tclock += 4
-            pure Nop
+        0x00 -> pure Nop
 
         0x01 -> do
             cpu.tclock += 12
@@ -224,9 +214,9 @@ toInstruction = \case
         i | i .&. 0xC7 == 0x04 -> Inc <$> argToByteSource (extractOctalArg 3 i)
         i | i .&. 0xC7 == 0x05 -> Dec <$> argToByteSource (extractOctalArg 3 i)
 
-        i | i .&. 0xC7 == 0x06 -> Ld'
-            <$> argToByteSource (extractOctalArg 3 i)
-            <*> fmap Byte consumeByte
+        i | i .&. 0xC7 == 0x06 ->
+            Ld' <$> argToByteSource (extractOctalArg 3 i)
+                <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
 
         0x0B -> do
             cpu.tclock += 8
@@ -346,7 +336,7 @@ toInstruction = \case
             cpu.tclock += 16
             Push <$> use (cpu.register.bc)
 
-        0xC6 -> Add . Byte <$> consumeByte
+        0xC6 -> Add . Address . addr <$> (cpu.register.pc <<+= 1)
 
         0xC9 -> do
             cpu.tclock += 16
@@ -364,8 +354,8 @@ toInstruction = \case
             Call <$> consumeWord
 
         0xD0 -> pure $ Ret (Just NC)
-        0xD6 -> Sub . Byte <$> consumeByte
-        0xDE -> Sbc . Byte <$> consumeByte
+        0xD6 -> Sub . Address . addr <$> (cpu.register.pc <<+= 1)
+        0xDE -> Sbc . Address . addr <$> (cpu.register.pc <<+= 1)
 
         0xE0 -> do
             cpu.tclock += 12
@@ -386,7 +376,7 @@ toInstruction = \case
             cpu.tclock += 16
             Push <$> use (cpu.register.hl)
 
-        0xE6 -> And . Byte <$> consumeByte
+        0xE6 -> And . Address . addr <$> (cpu.register.pc <<+= 1)
 
         0xE9 -> do
             cpu.tclock += 4
