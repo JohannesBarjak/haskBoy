@@ -1,6 +1,6 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DataKinds       #-}
 {-# LANGUAGE LambdaCase      #-}
+{-# LANGUAGE GADTs           #-}
 
 module HaskBoy.Cpu.Execution (execute, toInstruction) where
 
@@ -21,22 +21,22 @@ import Numeric (showHex)
 
 data Instruction
     = Nop
-    | Xor ByteSource
-    | Or ByteSource
+    | Xor (Argument Word8)
+    | Or (Argument Word8)
     | Cpl
-    | And ByteSource
+    | And (Argument Word8)
     | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
-    | Ld' ByteSource ByteSource
+    | Ld' (Argument Word8) (Argument Word8)
     | AHLI | HLIA
     | AHLD | HLDA
     | Store16 (ALens' Emulator Word16) Word16
-    | Inc ByteSource
+    | Inc (Argument Word8)
     | Inc16 (ALens' Registers Word16)
-    | Dec ByteSource
+    | Dec (Argument Word8)
     | Dec16 (ALens' Registers Word16)
-    | Add ByteSource
-    | Sub ByteSource
-    | Sbc ByteSource
+    | Add (Argument Word8)
+    | Sub (Argument Word8)
+    | Sbc (Argument Word8)
     | Bit Int Word8
     | Cmp Word8
     | Jmp Word16
@@ -53,18 +53,9 @@ data Condition
     = Z | NZ
     | C | NC
 
-data ByteSource
-    = Register (ALens' Cpu Word8)
-    | Address  (ALens' Mmu Word8)
-
-data WordSource
-    = Register16 (ALens' Cpu Word16)
-    | Address16  (ALens' Mmu Word16)
-    | Word Word16
-
-makePrisms ''ByteSource
-makePrisms ''WordSource
-makePrisms ''Instruction
+data Argument a where
+    Register :: (ALens' Cpu a) -> Argument a
+    Address :: (ALens' Mmu a) -> Argument a
 
 execute :: Instruction -> State Emulator ()
 execute = \case
@@ -123,7 +114,6 @@ execute = \case
         Sbc v -> mcycle 1 *> case v of
             Register r -> sbc =<< use (cpu.cloneLens r)
             Address av -> mcycle 1 *> (sbc =<< use (mmu.cloneLens av))
-            Byte bv -> mcycle 1 *> sbc bv
 
         Bit n v -> zoom (cpu.register) (bit n v)
 
@@ -423,7 +413,7 @@ toInstruction = \case
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
-argToByteSource :: Word8 -> State Emulator ByteSource
+argToByteSource :: Word8 -> State Emulator (Argument Word8)
 argToByteSource 0 = pure $ Register (register.b)
 argToByteSource 1 = pure $ Register (register.c)
 argToByteSource 2 = pure $ Register (register.d)
