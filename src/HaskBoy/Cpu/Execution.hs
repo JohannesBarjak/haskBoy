@@ -99,7 +99,9 @@ execute = \case
                 Register r -> dec (cpu.r)
                 Address av -> mcycle 2 *> dec (mmu.av)
 
-        Dec16 r -> cpu.register.cloneLens r -= 1
+        Dec16 r -> do
+            mcycle 2
+            cpu.register.cloneLens r -= 1
 
         Add bs -> mcycle 1 *> case bs of
                 Register r -> add =<< use (cpu.cloneLens r)
@@ -115,7 +117,9 @@ execute = \case
 
         Bit n v -> zoom (cpu.register) (bit n v)
 
-        Inc16 r -> cpu.register.cloneLens r += 1
+        Inc16 r -> do
+            mcycle 2
+            cpu.register.cloneLens r += 1
 
         Cmp v -> zoom (cpu.register) $ cmp v
 
@@ -132,18 +136,12 @@ execute = \case
 
         Call v -> call v
 
-        Ret mk -> do
-            cpu.tclock += 8
+        Ret mk -> mcycle 2 *> case mk of
+                Just k -> do
+                    mcycle 3
+                    zoom cpu (condition k) >>= flip when ret
 
-            case mk of
-                Just k  -> do
-                    cpu.tclock += 12
-
-                    zoom cpu (condition k)
-                        >>= flip when ret
-                Nothing -> do
-                    cpu.tclock += 8
-                    ret
+                Nothing -> mcycle 2 *> ret
 
         EnableInterrupt -> cpu.interruptEnable .= True
         DisableInterrupt -> cpu.interruptEnable .= False
@@ -169,9 +167,7 @@ toInstruction = \case
             nn <- use (cpu.register.bc)
             pure $ Ld (Address $ addr nn) (Register $ register.a)
 
-        0x03 -> do
-            cpu.tclock += 8
-            pure (Inc16 bc)
+        0x03 -> pure (Inc16 bc)
 
         i | i .&. 0xC7 == 0x04 -> Inc <$> toArgument (extractOctalArg 3 i)
         i | i .&. 0xC7 == 0x05 -> Dec <$> toArgument (extractOctalArg 3 i)
@@ -180,25 +176,13 @@ toInstruction = \case
             Ld <$> toArgument (extractOctalArg 3 i)
                <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
 
-        0x0B -> do
-            cpu.tclock += 8
-            pure (Dec16 bc)
-
-        0x2B -> do
-            cpu.tclock += 8
-            pure (Dec16 hl)
-
-        0x13 -> do
-            cpu.tclock += 8
-            pure (Inc16 de)
-
-        0x23 -> do
-            cpu.tclock += 8
-            pure (Inc16 hl)
-
-        0x33 -> do
-            cpu.tclock += 8
-            pure (Inc16 sp)
+        0x0B -> pure (Dec16 bc)
+        0x13 -> pure (Inc16 de)
+        0x1B -> pure (Dec16 de)
+        0x2B -> pure (Dec16 hl)
+        0x23 -> pure (Inc16 hl)
+        0x33 -> pure (Inc16 sp)
+        0x3B -> pure (Dec16 sp)
 
         i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.b) <$> toArgument (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0x48 -> Ld (Register $ register.c) <$> toArgument (extractOctalArg 0 i)
