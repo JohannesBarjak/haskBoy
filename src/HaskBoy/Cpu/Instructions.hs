@@ -3,7 +3,7 @@
 
 module HaskBoy.Cpu.Instructions
     ( inc, dec
-    , byteAnd, xor, byteOr
+    , and, xor, or
     , jr, call, jmp, ret
     , cmp
     , add, sub, sbc
@@ -11,6 +11,8 @@ module HaskBoy.Cpu.Instructions
     , consumeByte, consumeWord
     , popStack, pushStack
     ) where
+
+import Prelude hiding (and, or)
 
 import HaskBoy.Emulator
 import HaskBoy.Mmu
@@ -133,8 +135,8 @@ rl r = zoom cpu $ do
             v <- use (register.r)
             pure $ toBool (v .&. (1 `shiftL` 7))
 
-byteOr :: Word8 -> State Emulator ()
-byteOr n = do
+or :: Word8 -> State Emulator ()
+or n = do
     a' <- use (cpu.register.a)
     let result = a' .|. n
 
@@ -157,8 +159,8 @@ xor n = do
 
     cpu.register.a .= result
 
-byteAnd :: Word8 -> State Emulator ()
-byteAnd n = do
+and :: Word8 -> State Emulator ()
+and n = do
     a' <- use (cpu.register.a)
     let result = a' .&. n
 

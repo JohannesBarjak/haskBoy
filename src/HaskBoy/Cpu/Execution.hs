@@ -8,7 +8,7 @@ import HaskBoy.Emulator
 
 import HaskBoy.Mmu
 import HaskBoy.Cpu
-import HaskBoy.Cpu.Instructions
+import HaskBoy.Cpu.Instructions as Instr
 
 import Control.Lens
 import Control.Monad.State.Strict
@@ -79,8 +79,8 @@ execute = \case
                 Address v -> mcycle 1 *> (xor =<< use (mmu.cloneLens v))
 
         Or bs -> mcycle 1 *> case bs of
-                Register r -> byteOr =<< use (cpu.cloneLens r)
-                Address v -> mcycle 1 *> (byteOr =<< use (mmu.cloneLens v))
+                Register r -> Instr.or =<< use (cpu.cloneLens r)
+                Address v -> mcycle 1 *> (Instr.or =<< use (mmu.cloneLens v))
 
         Cpl -> do
             cpu.register.a %= complement
@@ -88,8 +88,8 @@ execute = \case
             cpu.register.subOp .= True
 
         And bs -> mcycle 1 *> case bs of
-                Register r -> byteAnd =<< use (cpu.cloneLens r)
-                Address v -> mcycle 1 *> (byteAnd =<< use (mmu.cloneLens v))
+                Register r -> Instr.and =<< use (cpu.cloneLens r)
+                Address v -> mcycle 1 *> (Instr.and =<< use (mmu.cloneLens v))
 
         Inc bs -> mcycle 1 *> case bs of
                 Register r -> inc (cpu.r)
