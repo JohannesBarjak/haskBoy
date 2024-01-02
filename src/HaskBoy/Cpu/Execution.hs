@@ -25,10 +25,7 @@ data Instruction
     | Or (Argument Word8)
     | Cpl
     | And (Argument Word8)
-    | Ld (ALens' Emulator Word8) (ALens' Emulator Word8)
-    | Ld' (Argument Word8) (Argument Word8)
-    | AHLI | HLIA
-    | AHLD | HLDA
+    | Ld (Argument Word8) (Argument Word8)
     | Store16 (ALens' Emulator Word16) Word16
     | Inc (Argument Word8)
     | Inc16 (ALens' Registers Word16)
@@ -61,18 +58,19 @@ execute :: Instruction -> State Emulator ()
 execute = \case
         Nop -> mcycle 1
 
-        Ld lhs rhs -> cloneLens lhs <~ use (cloneLens rhs)
-
-        Ld' lhs rhs -> mcycle 1 *> case lhs of
+        Ld lhs rhs -> mcycle 1 *> case lhs of
                 Register lr -> do
                     case rhs of
                         Register rr -> cpu.cloneLens lr <~ use (cpu.cloneLens rr)
                         Address av -> do
                             mcycle 1
                             cpu.cloneLens lr <~ use (mmu.cloneLens av)
+
                 Address v -> mcycle 1 *> case rhs of
                         Register r -> mmu.cloneLens v <~ use (cpu.cloneLens r)
-                        Address av -> mmu.cloneLens v <~ use (mmu.cloneLens av)
+                        Address av -> do
+                            mcycle 1
+                            mmu.cloneLens v <~ use (mmu.cloneLens av)
 
         Store16 r v -> cloneLens r .= v
 
@@ -116,30 +114,6 @@ execute = \case
             Address av -> mcycle 1 *> (sbc =<< use (mmu.cloneLens av))
 
         Bit n v -> zoom (cpu.register) (bit n v)
-
-        AHLI -> do
-            nn <- use (cpu.register.hl)
-            cpu.register.a <~ use (mmu.addr nn)
-
-            cpu.register.hl += 1
-
-        AHLD -> do
-            nn <- use (cpu.register.hl)
-            cpu.register.a <~ use (mmu.addr nn)
-
-            cpu.register.hl -= 1
-
-        HLIA -> do
-            nn <- use (cpu.register.hl)
-            mmu.addr nn <~ use (cpu.register.a)
-
-            cpu.register.hl += 1
-
-        HLDA -> do
-            nn <- use (cpu.register.hl)
-            mmu.addr nn <~ use (cpu.register.a)
-
-            cpu.register.hl -= 1
 
         Inc16 r -> cpu.register.cloneLens r += 1
 
@@ -192,10 +166,8 @@ toInstruction = \case
             Store16 (cpu.register.bc) <$> consumeWord
 
         0x02 -> do
-            cpu.tclock += 8
-
             nn <- use (cpu.register.bc)
-            pure (Ld (mmu.addr nn) (cpu.register.a))
+            pure $ Ld (Address $ addr nn) (Register $ register.a)
 
         0x03 -> do
             cpu.tclock += 8
@@ -205,8 +177,8 @@ toInstruction = \case
         i | i .&. 0xC7 == 0x05 -> Dec <$> argToByteSource (extractOctalArg 3 i)
 
         i | i .&. 0xC7 == 0x06 ->
-            Ld' <$> argToByteSource (extractOctalArg 3 i)
-                <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
+            Ld <$> argToByteSource (extractOctalArg 3 i)
+               <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
 
         0x0B -> do
             cpu.tclock += 8
@@ -228,60 +200,49 @@ toInstruction = \case
             cpu.tclock += 8
             pure (Inc16 sp)
 
-        i | i .&. 0xF8 == 0x40 -> Ld' (Register $ register.b) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x48 -> Ld' (Register $ register.c) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x50 -> Ld' (Register $ register.d) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x58 -> Ld' (Register $ register.e) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x60 -> Ld' (Register $ register.h) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x68 -> Ld' (Register $ register.l) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.b) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x48 -> Ld (Register $ register.c) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x50 -> Ld (Register $ register.d) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x58 -> Ld (Register $ register.e) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x60 -> Ld (Register $ register.h) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x68 -> Ld (Register $ register.l) <$> argToByteSource (extractOctalArg 0 i)
 
         i | i .&. 0xF8 == 0x70 -> do
             v <- use (cpu.register.hl)
-            Ld' (Address $ addr v) <$> argToByteSource (extractOctalArg 0 i)
+            Ld (Address $ addr v) <$> argToByteSource (extractOctalArg 0 i)
 
-        i | i .&. 0xF8 == 0x78 -> Ld' (Register $ register.a) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x78 -> Ld (Register $ register.a) <$> argToByteSource (extractOctalArg 0 i)
 
         i | i .&. 0xF8 == 0x90 -> Sub <$> argToByteSource (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0x98 -> Sbc <$> argToByteSource (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0xA8 -> Xor <$> argToByteSource (extractOctalArg 0 i)
 
         0x12 -> do
-            cpu.tclock += 8
-
             nn <- use (cpu.register.de)
-            pure (Ld (mmu.addr nn) (cpu.register.a))
+            pure $ Ld (Address $ addr nn) (Register $ register.a)
 
         0x22 -> do
-            cpu.tclock += 8
-            pure HLIA
+            nn <- cpu.register.hl <<+= 1
+            pure $ Ld (Address $ addr nn) (Register $ register.a)
 
         0x31 -> do
             cpu.tclock += 12
             Store16 (cpu.register.sp) <$> consumeWord
 
         0x32 -> do
-            cpu.tclock += 8
-            pure HLDA
+            nn <- cpu.register.hl <<-= 1
+            pure $ Ld (Address $ addr nn) (Register $ register.a)
 
         0x0A -> do
-            cpu.tclock += 8
-
             nn <- use (cpu.register.bc)
-            pure (Ld (cpu.register.a) (mmu.addr nn))
+            pure $ Ld (Register $ register.a) (Address $ addr nn)
 
         0x1A -> do
-            cpu.tclock += 8
-
             nn <- use (cpu.register.de)
-            pure (Ld (cpu.register.a) (mmu.addr nn))
+            pure $ Ld (Register $ register.a) (Address $ addr nn)
 
-        0x2A -> do
-            cpu.tclock += 8
-            pure AHLI
-
-        0x3A -> do
-            cpu.tclock += 8
-            pure AHLD
+        0x2A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<+= 1)
+        0x3A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<-= 1)
 
         i | i .&. 0xF8 == 0x80 -> Add <$> argToByteSource (extractOctalArg 0 i)
 
@@ -304,10 +265,8 @@ toInstruction = \case
         0x38 -> Jr <$> use (cpu.register.carry)
 
         0x77 -> do
-            cpu.tclock += 8
-
             nn <- use (cpu.register.hl)
-            pure (Ld (mmu.addr nn) (cpu.register.a))
+            pure $ Ld (Address $ addr nn) (Register $ register.a)
 
         i | i .&. 0xF8 == 0xA0 -> And <$> argToByteSource (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0xB0 -> Or <$> argToByteSource (extractOctalArg 0 i)
@@ -348,19 +307,17 @@ toInstruction = \case
         0xDE -> Sbc . Address . addr <$> (cpu.register.pc <<+= 1)
 
         0xE0 -> do
-            cpu.tclock += 12
-
+            mcycle 1
             v <- fromIntegral <$> consumeByte
-            pure (Ld (mmu.addr (0xFF00 + v)) (cpu.register.a))
+            pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.a)
 
         0xE1 -> do
             cpu.tclock += 12
             pure (Pop hl)
 
         0xE2 -> do
-            cpu.tclock += 8
             v <- fromIntegral <$> use (cpu.register.c)
-            pure (Ld (mmu.addr (0xFF00 + v)) (cpu.register.a))
+            pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.a)
 
         0xE5 -> do
             cpu.tclock += 16
@@ -374,16 +331,14 @@ toInstruction = \case
             pure (Jmp av)
 
         0xEA -> do
-            cpu.tclock += 16
-
+            mcycle 2
             v <- consumeWord
-            pure (Ld (mmu.addr v) (cpu.register.a))
+            pure $ Ld (Address $ addr v) (Register $ register.a)
 
         0xF0 -> do
-            cpu.tclock += 12
-
+            mcycle 1
             v <- fromIntegral <$> consumeByte
-            pure (Ld (cpu.register.a) (mmu.addr (0xFF00 + v)))
+            pure $ Ld (Register $ register.a) (Address $ addr (0xFF00 + v))
 
         0xF1 -> do
             cpu.tclock += 12
@@ -398,10 +353,8 @@ toInstruction = \case
             Push <$> use (cpu.register.af)
 
         0xFA -> do
-            cpu.tclock += 16
-
-            v <- consumeWord
-            pure (Ld (cpu.register.a) (mmu.addr v))
+            mcycle 2
+            Ld (Register $ register.a) . Address . addr <$> consumeWord
 
         0xFB -> do
             cpu.tclock += 4
