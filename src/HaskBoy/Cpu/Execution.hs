@@ -173,11 +173,11 @@ toInstruction = \case
             cpu.tclock += 8
             pure (Inc16 bc)
 
-        i | i .&. 0xC7 == 0x04 -> Inc <$> argToByteSource (extractOctalArg 3 i)
-        i | i .&. 0xC7 == 0x05 -> Dec <$> argToByteSource (extractOctalArg 3 i)
+        i | i .&. 0xC7 == 0x04 -> Inc <$> toArgument (extractOctalArg 3 i)
+        i | i .&. 0xC7 == 0x05 -> Dec <$> toArgument (extractOctalArg 3 i)
 
         i | i .&. 0xC7 == 0x06 ->
-            Ld <$> argToByteSource (extractOctalArg 3 i)
+            Ld <$> toArgument (extractOctalArg 3 i)
                <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
 
         0x0B -> do
@@ -200,22 +200,22 @@ toInstruction = \case
             cpu.tclock += 8
             pure (Inc16 sp)
 
-        i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.b) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x48 -> Ld (Register $ register.c) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x50 -> Ld (Register $ register.d) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x58 -> Ld (Register $ register.e) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x60 -> Ld (Register $ register.h) <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x68 -> Ld (Register $ register.l) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.b) <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x48 -> Ld (Register $ register.c) <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x50 -> Ld (Register $ register.d) <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x58 -> Ld (Register $ register.e) <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x60 -> Ld (Register $ register.h) <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x68 -> Ld (Register $ register.l) <$> toArgument (extractOctalArg 0 i)
 
         i | i .&. 0xF8 == 0x70 -> do
             v <- use (cpu.register.hl)
-            Ld (Address $ addr v) <$> argToByteSource (extractOctalArg 0 i)
+            Ld (Address $ addr v) <$> toArgument (extractOctalArg 0 i)
 
-        i | i .&. 0xF8 == 0x78 -> Ld (Register $ register.a) <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x78 -> Ld (Register $ register.a) <$> toArgument (extractOctalArg 0 i)
 
-        i | i .&. 0xF8 == 0x90 -> Sub <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x98 -> Sbc <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0xA8 -> Xor <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x90 -> Sub <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x98 -> Sbc <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0xA8 -> Xor <$> toArgument (extractOctalArg 0 i)
 
         0x12 -> do
             nn <- use (cpu.register.de)
@@ -244,7 +244,7 @@ toInstruction = \case
         0x2A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<+= 1)
         0x3A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<-= 1)
 
-        i | i .&. 0xF8 == 0x80 -> Add <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x80 -> Add <$> toArgument (extractOctalArg 0 i)
 
         0x18 -> pure (Jr True)
         0x20 -> Jr . not <$> use (cpu.register.zero)
@@ -268,8 +268,8 @@ toInstruction = \case
             nn <- use (cpu.register.hl)
             pure $ Ld (Address $ addr nn) (Register $ register.a)
 
-        i | i .&. 0xF8 == 0xA0 -> And <$> argToByteSource (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0xB0 -> Or <$> argToByteSource (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0xA0 -> And <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0xB0 -> Or <$> toArgument (extractOctalArg 0 i)
 
         0xC0 -> pure $ Ret (Just NZ)
 
@@ -366,20 +366,20 @@ toInstruction = \case
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
-argToByteSource :: Word8 -> State Emulator (Argument Word8)
-argToByteSource 0 = pure $ Register (register.b)
-argToByteSource 1 = pure $ Register (register.c)
-argToByteSource 2 = pure $ Register (register.d)
-argToByteSource 3 = pure $ Register (register.e)
-argToByteSource 4 = pure $ Register (register.h)
-argToByteSource 5 = pure $ Register (register.l)
+toArgument :: Word8 -> State Emulator (Argument Word8)
+toArgument 0 = pure $ Register (register.b)
+toArgument 1 = pure $ Register (register.c)
+toArgument 2 = pure $ Register (register.d)
+toArgument 3 = pure $ Register (register.e)
+toArgument 4 = pure $ Register (register.h)
+toArgument 5 = pure $ Register (register.l)
 
-argToByteSource 6 = do
+toArgument 6 = do
     nn <- use (cpu.register.hl)
     pure $ Address (addr nn)
 
-argToByteSource 7 = pure $ Register (register.a)
-argToByteSource _ = undefined
+toArgument 7 = pure $ Register (register.a)
+toArgument _ = undefined
 
 extractOctalArg :: (Bits a, Num a) => Int -> a -> a
 extractOctalArg i v = shiftR v i .&. 7
