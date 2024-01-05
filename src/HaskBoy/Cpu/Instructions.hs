@@ -100,7 +100,7 @@ add n = do
 
     cpu.register.zero .= (result == 0)
     cpu.register.hcarry .= ((a' .&. 0xF) + (n .&. 0xF) > 0xF)
-    cpu.register.carry .= (fromIntegral a' + fromIntegral n > (0xFF :: Int))
+    cpu.register.carry .= (toInteger a' + toInteger n > 0xFF)
     cpu.register.subOp .= False
 
     cpu.register.a .= result
