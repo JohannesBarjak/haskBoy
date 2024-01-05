@@ -32,6 +32,7 @@ data Instruction
     | Dec (Argument Word8)
     | Dec16 (ALens' Registers Word16)
     | Add (Argument Word8)
+    | StackStore Word8
     | Sub (Argument Word8)
     | Sbc (Argument Word8)
     | Bit Int Word8
@@ -73,6 +74,17 @@ execute = \case
                             mmu.cloneLens v <~ use (mmu.cloneLens av)
 
         Store16 r v -> cloneLens r .= v
+
+        StackStore v -> do
+            mcycle 3
+            p <- use (cpu.register.sp)
+
+            cpu.register.zero .= False
+            cpu.register.subOp .= False
+            cpu.register.hcarry .= (fromIntegral v .&. 0xF + (p .&. 0xF) > 0xF)
+            cpu.register.carry .= (toInteger v + toInteger p > 0xFF)
+
+            cpu.register.hl .= p + fromIntegral v
 
         Xor bs -> mcycle 1 *> case bs of
                 Register r -> xor =<< use (cpu.cloneLens r)
@@ -126,7 +138,10 @@ execute = \case
         Jr v -> jr v
         Jmp v -> cpu.register.pc .= v
 
-        Push v -> pushStack v
+        Push v -> do
+            mcycle 4
+            pushStack v
+
         Pop r -> cpu.register.cloneLens r <~ popStack
 
         PopAF -> do
@@ -265,10 +280,7 @@ toInstruction = \case
             cpu.tclock += 16
             Jmp <$> consumeWord
 
-        0xC5 -> do
-            cpu.tclock += 16
-            Push <$> use (cpu.register.bc)
-
+        0xC5 -> Push <$> use (cpu.register.bc)
         0xC6 -> Add . Address . addr <$> (cpu.register.pc <<+= 1)
 
         0xC9 -> do
@@ -287,6 +299,7 @@ toInstruction = \case
             Call <$> consumeWord
 
         0xD0 -> pure $ Ret (Just NC)
+        0xD5 -> Push <$> use (cpu.register.de)
         0xD6 -> Sub . Address . addr <$> (cpu.register.pc <<+= 1)
         0xDE -> Sbc . Address . addr <$> (cpu.register.pc <<+= 1)
 
@@ -303,10 +316,7 @@ toInstruction = \case
             v <- fromIntegral <$> use (cpu.register.c)
             pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.a)
 
-        0xE5 -> do
-            cpu.tclock += 16
-            Push <$> use (cpu.register.hl)
-
+        0xE5 -> Push <$> use (cpu.register.hl)
         0xE6 -> And . Address . addr <$> (cpu.register.pc <<+= 1)
 
         0xE9 -> do
@@ -332,9 +342,8 @@ toInstruction = \case
             cpu.tclock += 4
             pure DisableInterrupt
 
-        0xF5 -> do
-            cpu.tclock += 16
-            Push <$> use (cpu.register.af)
+        0xF5 -> Push <$> use (cpu.register.af)
+        0xF8 -> StackStore <$> consumeByte
 
         0xFA -> do
             mcycle 2
