@@ -7,7 +7,7 @@ module HaskBoy.Cpu.Instructions
     , jr, call, jmp, ret
     , cmp
     , add, sub, sbc
-    , rl, bit
+    , rl, bit, swap
     , consumeByte, consumeWord
     , popStack, pushStack
     ) where
@@ -19,7 +19,7 @@ import HaskBoy.Mmu
 import HaskBoy.Cpu
 
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits((.&.), (.|.), shiftL))
+import Data.Bits (Bits((.&.), (.|.), shiftL), (.<<.), (.>>.))
 import Data.Bits qualified as Bits
 
 import Control.Monad.State.Strict
@@ -111,11 +111,13 @@ sub n = do
     zoom (cpu.register) $ cmp n
     cpu.register.a -= n
 
-bit :: Int -> Word8 -> State Registers ()
-bit n v = do
-    zero .= (v .&. shiftL 1 n == 0)
-    hcarry .= True
-    subOp .= False
+bit :: Int -> ALens' Emulator Word8 -> State Emulator ()
+bit n r = do
+    v <- use (cloneLens r)
+
+    cpu.register.zero .= (v .&. shiftL 1 n == 0)
+    cpu.register.hcarry .= True
+    cpu.register.subOp .= False
 
 rl :: Lens' Registers Word8 -> State Emulator ()
 rl r = zoom cpu $ do
@@ -134,6 +136,19 @@ rl r = zoom cpu $ do
     where newCarry = do
             v <- use (register.r)
             pure $ toBool (v .&. (1 `shiftL` 7))
+
+-- This instructions swaps nibbles
+swap :: ALens' Emulator Word8 -> State Emulator ()
+swap r = do
+    v <- use (cloneLens r)
+    let result = v .>>. 4 .|. v .<<. 4;
+
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= False
+    cpu.register.carry .= False
+    cpu.register.subOp .= False
+
+    cloneLens r .= result
 
 or :: Word8 -> State Emulator ()
 or n = do

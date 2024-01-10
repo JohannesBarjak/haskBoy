@@ -35,7 +35,8 @@ data Instruction
     | StackStore Word8
     | Sub (Argument Word8)
     | Sbc (Argument Word8)
-    | Bit Int Word8
+    | Swap (Argument Word8)
+    | Bit Int (Argument Word8)
     | Cmp Word8
     | Jmp Word16
     | Jr Bool
@@ -127,7 +128,13 @@ execute = \case
             Register r -> sbc =<< use (cpu.cloneLens r)
             Address av -> mcycle 1 *> (sbc =<< use (mmu.cloneLens av))
 
-        Bit n v -> zoom (cpu.register) (bit n v)
+        Swap bs -> mcycle 2 *> case bs of
+            Register r -> swap (cpu.r)
+            Address av -> mcycle 2 *> swap (mmu.av)
+
+        Bit n bs -> mcycle 2 *> case bs of
+            Register r -> bit n (cpu.r)
+            Address av -> mcycle 1 *> bit n (mmu.av)
 
         Inc16 r -> do
             mcycle 2
@@ -288,9 +295,9 @@ toInstruction = \case
             pure (Ret Nothing)
 
         0xCB -> consumeByte >>= \case
-            0x7C -> do
-                cpu.tclock += 8
-                Bit 7 <$> use (cpu.register.h)
+
+            i | i .&. 0xF8 == 0x30 -> Swap <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0x78 -> Bit (extractOctalArg 0 $ fromIntegral i) <$> toArgument (extractOctalArg 0 i)
 
             arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
