@@ -15,7 +15,6 @@ import Control.Monad.State.Strict
 
 import Data.Word (Word8, Word16)
 import Data.Bits (Bits((.&.), shiftR, complement))
-import Data.Mod
 
 import Numeric (showHex)
 
@@ -32,6 +31,7 @@ data Instruction
     | Dec (Argument Word8)
     | Dec16 (ALens' Registers Word16)
     | Add (Argument Word8)
+    | Add16 (ALens' Registers Word16)
     | StackStore Word8
     | Sub (Argument Word8)
     | Sbc (Argument Word8)
@@ -39,11 +39,13 @@ data Instruction
     | Bit Int (Argument Word8)
     | Cmp (Argument Word8)
     | Jmp Word16
+    | JmpC Condition Word16
     | Jr Bool
     | Push Word16
     | Pop (ALens' Registers Word16)
     | PopAF
     | Call Word16
+    | Rst Word16
     | Ret (Maybe Condition)
     | EnableInterrupt
     | DisableInterrupt
@@ -120,6 +122,8 @@ execute = \case
                 Register r -> add =<< use (cpu.cloneLens r)
                 Address av -> mcycle 1 *> (add =<< use (mmu.cloneLens av))
 
+        Add16 v -> mcycle 2 *> add16 (cpu.register.v)
+
         Sub bs -> mcycle 1 *> case bs of
             Register r -> sub (cpu.r)
             Address av -> mcycle 1 *> sub (mmu. av)
@@ -147,6 +151,11 @@ execute = \case
         Jr v -> jr v
         Jmp v -> cpu.register.pc .= v
 
+        JmpC k w -> do
+            mcycle 3
+            zoom cpu (condition k) >>=
+                flip when (mcycle 1 *> jmp w)
+
         Push v -> do
             mcycle 4
             pushStack v
@@ -159,6 +168,11 @@ execute = \case
             cpu.register.flag .= v
 
         Call v -> call v
+
+        Rst v -> do
+            mcycle 4
+            pushStack v
+            jmp v
 
         Ret mk -> mcycle 2 *> case mk of
                 Just k -> do
@@ -202,6 +216,7 @@ toInstruction = \case
 
         0x0B -> pure (Dec16 bc)
         0x13 -> pure (Inc16 de)
+        0x19 -> pure $ Add16 de
         0x1B -> pure (Dec16 de)
         0x2B -> pure (Dec16 hl)
         0x23 -> pure (Inc16 hl)
@@ -299,6 +314,8 @@ toInstruction = \case
             cpu.tclock += 16
             pure (Ret Nothing)
 
+        0xCA -> JmpC Z <$> consumeWord
+
         0xCB -> consumeByte >>= \case
 
             i | i .&. 0xF8 == 0x30 -> Swap <$> toArgument (extractOctalArg 0 i)
@@ -310,10 +327,13 @@ toInstruction = \case
             cpu.tclock += 24
             Call <$> consumeWord
 
+        0xCF -> pure $ Rst 0x08
+
         0xD0 -> pure $ Ret (Just NC)
         0xD5 -> Push <$> use (cpu.register.de)
         0xD6 -> Sub . Address . addr <$> (cpu.register.pc <<+= 1)
         0xDE -> Sbc . Address . addr <$> (cpu.register.pc <<+= 1)
+        0xDF -> pure $ Rst 0x18
 
         0xE0 -> do
             mcycle 1
@@ -341,6 +361,8 @@ toInstruction = \case
             v <- consumeWord
             pure $ Ld (Address $ addr v) (Register $ register.a)
 
+        0xEF -> pure $ Rst 0x28
+
         0xF0 -> do
             mcycle 1
             v <- fromIntegral <$> consumeByte
@@ -366,6 +388,7 @@ toInstruction = \case
             pure EnableInterrupt
 
         0xFE -> Cmp . Address . addr <$> (cpu.register.pc <<+= 1)
+        0xFF -> pure $ Rst 0x38
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 

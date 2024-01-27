@@ -7,6 +7,7 @@ module HaskBoy.Cpu.Instructions
     , jr, call, jmp, ret
     , cmp
     , add, sub, sbc
+    , add16
     , rl, bit, swap
     , consumeByte, consumeWord
     , popStack, pushStack
@@ -105,6 +106,17 @@ add n = do
     cpu.register.subOp .= False
 
     cpu.register.a .= result
+
+add16 :: ALens' Emulator Word16 -> State Emulator ()
+add16 wl = do
+    v <- use (cpu.register.hl)
+    w <- use (cloneLens wl)
+
+    cpu.register.hcarry .= ((v .&. 0x07FF) + (w .&. 0x07FF) > 0x07FF)
+    cpu.register.carry .= (v > 0xFFFF - w)
+    cpu.register.subOp .= False
+
+    cpu.register.hl .= v + w
 
 sub :: ALens' Emulator Word8 -> State Emulator ()
 sub n = do
