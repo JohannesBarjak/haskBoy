@@ -37,7 +37,7 @@ data Instruction
     | Sbc (Argument Word8)
     | Swap (Argument Word8)
     | Bit Int (Argument Word8)
-    | Cmp Word8
+    | Cmp (Argument Word8)
     | Jmp Word16
     | Jr Bool
     | Push Word16
@@ -121,8 +121,8 @@ execute = \case
                 Address av -> mcycle 1 *> (add =<< use (mmu.cloneLens av))
 
         Sub bs -> mcycle 1 *> case bs of
-            Register r -> sub =<< use (cpu.cloneLens r)
-            Address av -> mcycle 1 *> (sub =<< use (mmu.cloneLens av))
+            Register r -> sub (cpu.r)
+            Address av -> mcycle 1 *> sub (mmu. av)
 
         Sbc v -> mcycle 1 *> case v of
             Register r -> sbc =<< use (cpu.cloneLens r)
@@ -140,7 +140,9 @@ execute = \case
             mcycle 2
             cpu.register.cloneLens r += 1
 
-        Cmp v -> zoom (cpu.register) $ cmp v
+        Cmp bs -> mcycle 1 *> case bs of
+            Register r -> cmp (cpu.r)
+            Address av -> mcycle 1 *> cmp (mmu.av)
 
         Jr v -> jr v
         Jmp v -> cpu.register.pc .= v
@@ -268,6 +270,7 @@ toInstruction = \case
             cpu.tclock += 4
             pure Cpl
 
+        0x30 -> Jr . not <$> use (cpu.register.carry)
         0x38 -> Jr <$> use (cpu.register.carry)
 
         0x77 -> do
@@ -276,8 +279,10 @@ toInstruction = \case
 
         i | i .&. 0xF8 == 0xA0 -> And <$> toArgument (extractOctalArg 0 i)
         i | i .&. 0xF8 == 0xB0 -> Or <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0xB8 -> Cmp <$> toArgument (extractOctalArg 0 i)
 
         0xC0 -> pure $ Ret (Just NZ)
+        0xC8 -> pure $ Ret (Just Z)
 
         0xC1 -> do
             cpu.tclock += 12
@@ -360,9 +365,7 @@ toInstruction = \case
             cpu.tclock += 4
             pure EnableInterrupt
 
-        0xFE -> do
-            cpu.tclock += 8
-            Cmp <$> consumeByte
+        0xFE -> Cmp . Address . addr <$> (cpu.register.pc <<+= 1)
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 

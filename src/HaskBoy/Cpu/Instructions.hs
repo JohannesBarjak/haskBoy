@@ -60,14 +60,15 @@ jr jump = do
 
     else cpu.tclock += 8
 
-cmp :: Word8 -> State Registers ()
-cmp n = do
-    a' <- use a
+cmp :: ALens' Emulator Word8 -> State Emulator ()
+cmp r = do
+    a' <- use (cpu.register.a)
+    n <- use (cloneLens r)
 
-    zero .= (a' == n)
-    carry .= (a' < n)
-    hcarry .= (a' .&. 0xF < n .&. 0xF)
-    subOp .= True
+    cpu.register.zero .= (a' == n)
+    cpu.register.carry .= (a' < n)
+    cpu.register.hcarry .= (a' .&. 0xF < n .&. 0xF)
+    cpu.register.subOp .= True
 
 call :: Address -> State Emulator ()
 call nn = do
@@ -105,11 +106,12 @@ add n = do
 
     cpu.register.a .= result
 
-sub :: Word8 -> State Emulator ()
+sub :: ALens' Emulator Word8 -> State Emulator ()
 sub n = do
     -- Subtraction in the Gameboy sets flags in the same way as comparison
-    zoom (cpu.register) $ cmp n
-    cpu.register.a -= n
+    cmp n
+    v <- use (cloneLens n)
+    cpu.register.a -= v
 
 bit :: Int -> ALens' Emulator Word8 -> State Emulator ()
 bit n r = do
