@@ -164,9 +164,10 @@ swap r = do
 
     cloneLens r .= result
 
-or :: Word8 -> State Emulator ()
-or n = do
+or :: ALens' Emulator Word8 -> State Emulator ()
+or vl = do
     a' <- use (cpu.register.a)
+    n <- use (cloneLens vl)
     let result = a' .|. n
 
     cpu.register.zero .= (result == 0)

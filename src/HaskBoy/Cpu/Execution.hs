@@ -94,8 +94,8 @@ execute = \case
                 Address v -> mcycle 1 *> (xor =<< use (mmu.cloneLens v))
 
         Or bs -> mcycle 1 *> case bs of
-                Register r -> Instr.or =<< use (cpu.cloneLens r)
-                Address v -> mcycle 1 *> (Instr.or =<< use (mmu.cloneLens v))
+                Register r -> Instr.or (cpu.r)
+                Address v -> mcycle 1 *> Instr.or (mmu.v)
 
         Cpl -> do
             cpu.register.a %= complement
@@ -160,7 +160,9 @@ execute = \case
             mcycle 4
             pushStack v
 
-        Pop r -> cpu.register.cloneLens r <~ popStack
+        Pop r -> do
+            mcycle 3
+            cpu.register . cloneLens r <~ popStack
 
         PopAF -> do
             v <- use (cpu.register.flag)
@@ -299,9 +301,7 @@ toInstruction = \case
         0xC0 -> pure $ Ret (Just NZ)
         0xC8 -> pure $ Ret (Just Z)
 
-        0xC1 -> do
-            cpu.tclock += 12
-            pure (Pop bc)
+        0xC1 -> pure (Pop bc)
 
         0xC3 -> do
             cpu.tclock += 16
@@ -319,7 +319,8 @@ toInstruction = \case
         0xCB -> consumeByte >>= \case
 
             i | i .&. 0xF8 == 0x30 -> Swap <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0x78 -> Bit (extractOctalArg 0 $ fromIntegral i) <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0x48 -> Bit 1 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0x78 -> Bit 7 <$> toArgument (extractOctalArg 0 i)
 
             arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
@@ -330,6 +331,7 @@ toInstruction = \case
         0xCF -> pure $ Rst 0x08
 
         0xD0 -> pure $ Ret (Just NC)
+        0xD1 -> pure (Pop de)
         0xD5 -> Push <$> use (cpu.register.de)
         0xD6 -> Sub . Address . addr <$> (cpu.register.pc <<+= 1)
         0xDE -> Sbc . Address . addr <$> (cpu.register.pc <<+= 1)
@@ -340,9 +342,7 @@ toInstruction = \case
             v <- fromIntegral <$> consumeByte
             pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.a)
 
-        0xE1 -> do
-            cpu.tclock += 12
-            pure (Pop hl)
+        0xE1 -> pure (Pop hl)
 
         0xE2 -> do
             v <- fromIntegral <$> use (cpu.register.c)
@@ -377,6 +377,7 @@ toInstruction = \case
             pure DisableInterrupt
 
         0xF5 -> Push <$> use (cpu.register.af)
+        0xF6 -> Or . Address . addr <$> (cpu.register.pc <<+= 1)
         0xF8 -> StackStore <$> consumeByte
 
         0xFA -> do
