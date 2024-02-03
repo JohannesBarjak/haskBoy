@@ -1,4 +1,5 @@
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE DataKinds           #-}
 
 module HaskBoy.Ppu.Execution
     ( drawTiles
@@ -7,15 +8,14 @@ module HaskBoy.Ppu.Execution
     , getTileRow, tileRow
     , scx, scy
     , ly, lyc
-    , ppumode, _ppumode
-    , bgTileData
+    , ppuMode
     ) where
 
 import HaskBoy.Emulator
 
 import HaskBoy.Mmu
 import HaskBoy.Ppu
-import HaskBoy.BitOps
+import HaskBoy.Ppu.LcdControl
 
 import Control.Lens
 import Control.Monad.State.Strict
@@ -23,22 +23,26 @@ import Control.Monad.State.Strict
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 
+import Data.Mod.Word qualified as Mod8
+
 import Data.Bits (Bits((.&.), shiftR, (.|.)))
 import Data.Word (Word8)
 import Foreign.Marshal (toBool)
 
-import Control.Monad (join)
 import Control.Applicative (Applicative(liftA2))
 
 drawTiles :: State Emulator ()
 drawTiles = do
     lineY <- use (mmu.ly)
-    ppu.display.ix (fromIntegral lineY) <~ zoom mmu bgScanline
+    ppu.display.ix (fromIntegral $ Mod8.unMod lineY) <~ zoom mmu bgScanline
+
+drawSprites :: State Emulator ()
+drawSprites = undefined
 
 bgScanline :: State Mmu (Seq Pixel)
 bgScanline = do
     scrollX <- use scx
-    bgScan <- bgScanlineRow =<< liftA2 (+) (use scy) (use ly)
+    bgScan <- bgScanlineRow =<< liftA2 (+) (use scy) (fromIntegral . Mod8.unMod <$> use ly)
 
     let bgEnd = Seq.drop (fromIntegral scrollX) bgScan
 
@@ -84,12 +88,12 @@ tileRow (v1,v2) = Seq.zipWith toPixel (toBits v1) (toBits v2)
     where toBits :: Word8 -> Seq Bool
           toBits v = Seq.fromList $ [toBool $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
 
-ppumode :: Lens' Mmu Pixel
-ppumode = lens _ppumode $ \mmu' v ->
+ppuMode :: Lens' Mmu Pixel
+ppuMode = lens _ppuMode $ \mmu' v ->
     mmu'&raw 0xFF41 .~ ((mmu'^?!raw 0xFF41) .&. 0xFC) .|. fromIntegral (fromEnum v)
 
-_ppumode :: Mmu -> Pixel
-_ppumode mmu' = toEnum . fromIntegral $ (mmu'^?!raw 0xFF41) .&. 3
+_ppuMode :: Mmu -> Pixel
+_ppuMode mmu' = toEnum . fromIntegral $ (mmu'^?!raw 0xFF41) .&. 3
 
 scx, scy :: Lens' Mmu Word8
 scx = raw 0xFF43
@@ -98,10 +102,5 @@ scy = raw 0xFF42
 lyc :: Lens' Mmu Word8
 lyc = raw 0xFF45
 
-ly :: Lens' Mmu Word8
-ly = lens (^.raw 0xFF44) (\mmu' v -> mmu'&raw 0xFF44 .~ v `rem` 154)
-
-bgTileData :: Lens' Mmu Bool
-bgTileData = lens (^.lcdc.bit 4) (\mmu' v -> mmu'&lcdc.bit 4 .~ v)
-    where lcdc :: Lens' Mmu Word8
-          lcdc = raw 0xFF40
+ly :: Lens' Mmu (Mod8.Mod 154)
+ly = lens (fromIntegral . (^.raw 0xFF44)) (\mmu' v -> mmu'&raw 0xFF44 .~ fromIntegral (Mod8.unMod v))
