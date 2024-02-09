@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
 
 module HaskBoy.Ppu.Execution
     ( drawTiles
@@ -113,6 +114,15 @@ lyc = raw 0xFF45
 ly :: Lens' Mmu (Mod8.Mod 154)
 ly = lens (fromIntegral . (^.raw 0xFF44)) (\mem v -> mem&raw 0xFF44 .~ fromIntegral (Mod8.unMod v))
 
+-- | Read/Write sprites' object attributes.
 objAttr :: Address -> ALens' Mmu ObjAttr
-objAttr av = lens (\mem -> ObjAttr { _xPos = mem^.raw av, _yPos = mem^.raw (av + 1) })
-    (\mem oa -> mem&raw av .~ oa^.xPos)
+objAttr av = lens readOam (\mem oa -> execState (updateOam oa) mem)
+
+    where updateOam oa = do
+            raw av .= oa^.xPos
+            raw (av + 1) .= oa^.yPos
+
+          readOam mem = ObjAttr
+            { _xPos = mem^.raw av
+            , _yPos = mem^.raw (av + 1)
+            }
