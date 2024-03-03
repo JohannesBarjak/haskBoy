@@ -17,33 +17,33 @@ import Data.Bits
 import Data.Ix (Ix(inRange))
 
 data Mmu = Mmu
-    { _rom0  :: Seq Word8
-    , _rom1  :: Seq Word8
-    , _vram  :: Seq Word8
-    , _eram  :: Seq Word8
-    , _wram0 :: Seq Word8
-    , _wram1 :: Seq Word8
-    , _oam   :: Seq Word8
-    , _ioreg :: Seq Word8
-    , _hram  :: Seq Word8
-    , _ie    :: Word8
+    { _rom0  :: !(Seq Word8)
+    , _rom1  :: !(Seq Word8)
+    , _vram  :: !(Seq Word8)
+    , _eram  :: !(Seq Word8)
+    , _wram0 :: !(Seq Word8)
+    , _wram1 :: !(Seq Word8)
+    , _oam   :: !(Seq Word8)
+    , _ioreg :: !(Seq Word8)
+    , _hram  :: !(Seq Word8)
+    , _ie    :: !Word8
     }
 
 type Address = Word16
 
 data AddrType
-    = Bank0 Int
-    | Bank1 Int
-    | VRam Int
-    | ERam Int
-    | WRam0 Int
-    | WRam1 Int
-    | EWRam0 Int
-    | EWRam1 Int
-    | OAM Int
-    | NoUse Int
-    | IOReg Int
-    | HRam Int
+    = Bank0 !Int
+    | Bank1 !Int
+    | VRam !Int
+    | ERam !Int
+    | WRam0 !Int
+    | WRam1 !Int
+    | EWRam0 !Int
+    | EWRam1 !Int
+    | OAM !Int
+    | NoUse !Int
+    | IOReg !Int
+    | HRam !Int
     | Ie
 
 makeLenses ''Mmu
