@@ -23,10 +23,15 @@ data Mmu = Mmu
     , _eram  :: !(Seq Word8)
     , _wram0 :: !(Seq Word8)
     , _wram1 :: !(Seq Word8)
-    , _oam   :: !(Seq Word8)
+    , _oam   :: !(Seq ObjAttr)
     , _ioreg :: !(Seq Word8)
     , _hram  :: !(Seq Word8)
     , _ie    :: !Word8
+    }
+
+data ObjAttr = ObjAttr
+    { _yPos :: !Word8
+    , _xPos :: !Word8
     }
 
 type Address = Word16
@@ -47,6 +52,7 @@ data AddrType
     | Ie
 
 makeLenses ''Mmu
+makeLenses ''ObjAttr
 
 -- | Restricted access to the 'Mmu'
 addr :: Address -> Lens' Mmu Word8
@@ -69,10 +75,10 @@ raw idx = lens (readByte idx) $ \mem v -> case addrType idx of
     WRam1  i -> mem&wram1.ix i .~ v
     EWRam0 i -> mem&wram0.ix i .~ v
     EWRam1 i -> mem&wram1.ix i .~ v
-    OAM    i -> mem&oam.ix i .~ v
+    OAM    i -> mem&oam %~ writeOam i v
     NoUse  _ -> mem
     IOReg  i -> mem&ioreg.ix i .~ v
-    HRam   i -> mem&oam.ix i .~ v
+    HRam   i -> mem&hram.ix i .~ v
     Ie       -> mem&ie .~ v
 
 readWord :: Address -> Mmu -> Word16
@@ -113,11 +119,29 @@ readByte idx mem = do
         WRam1  i -> mem^?!wram1.ix i
         EWRam0 i -> mem^?!wram0.ix i
         EWRam1 i -> mem^?!wram1.ix i
-        OAM    i -> mem^?!oam.ix i
+        OAM    i -> readOam (mem^.oam) i
         NoUse  _ -> 0xFF
         IOReg  i -> mem^?!ioreg.ix i
         HRam   i -> mem^?!hram.ix i
         Ie       -> mem^?!ie
+
+readOam :: Seq ObjAttr -> Int -> Word8
+readOam mem av = extractByte oai $ mem^?!ix idx
+    where idx = fromIntegral $ av `rem` 40
+          oai = av `rem` 4
+
+          extractByte 0 (ObjAttr x _) = x
+          extractByte 1 (ObjAttr _ y) = y
+          extractByte _ _ = undefined
+
+writeOam :: Int -> Word8 -> Seq ObjAttr -> Seq ObjAttr
+writeOam av v mem = case oai of
+        0 -> mem&ix idx.xPos .~ v
+        1 -> mem&ix idx.yPos .~ v
+        _ -> undefined
+
+    where idx = fromIntegral $ av `rem` 40
+          oai = av `rem` 4
 
 writeByte :: Address -> Word8 -> Mmu -> Mmu
 writeByte idx v mem = do

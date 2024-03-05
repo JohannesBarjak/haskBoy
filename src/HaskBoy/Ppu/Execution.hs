@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
@@ -32,13 +31,6 @@ import Data.Word (Word8)
 import Foreign.Marshal (toBool)
 
 import Control.Applicative (Applicative(liftA2))
-
-data ObjAttr = ObjAttr
-    { _yPos :: Word8
-    , _xPos :: Word8
-    }
-
-makeLenses ''ObjAttr
 
 drawTiles :: State Emulator ()
 drawTiles = do
@@ -113,16 +105,3 @@ lyc = raw 0xFF45
 
 ly :: Lens' Mmu (Mod8.Mod 154)
 ly = lens (fromIntegral . (^.raw 0xFF44)) (\mem v -> mem&raw 0xFF44 .~ fromIntegral (Mod8.unMod v))
-
--- | Read/Write sprites' object attributes.
-objAttr :: Address -> ALens' Mmu ObjAttr
-objAttr av = lens readOam (\mem oa -> execState (updateOam oa) mem)
-
-    where updateOam oa = do
-            raw av .= oa^.xPos
-            raw (av + 1) .= oa^.yPos
-
-          readOam mem = ObjAttr
-            { _xPos = mem^.raw av
-            , _yPos = mem^.raw (av + 1)
-            }
