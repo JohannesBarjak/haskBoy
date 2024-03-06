@@ -6,6 +6,8 @@ module HaskBoy.Mmu
     , Mmu(..)
     , addr, addr16
     , raw
+    , ObjAttr(..)
+    , yPos, xPos, tlIdx
     ) where
 
 import Control.Lens
@@ -30,8 +32,9 @@ data Mmu = Mmu
     }
 
 data ObjAttr = ObjAttr
-    { _yPos :: !Word8
-    , _xPos :: !Word8
+    { _yPos  :: !Word8
+    , _xPos  :: !Word8
+    , _tlIdx :: !Word8
     }
 
 type Address = Word16
@@ -130,14 +133,16 @@ readOam mem av = extractByte oai $ mem^?!ix idx
     where idx = fromIntegral $ av `rem` 40
           oai = av `rem` 4
 
-          extractByte 0 (ObjAttr x _) = x
-          extractByte 1 (ObjAttr _ y) = y
+          extractByte 0 (ObjAttr y _  _) = y
+          extractByte 1 (ObjAttr _ x  _) = x
+          extractByte 2 (ObjAttr _ _ tI) = tI
           extractByte _ _ = undefined
 
 writeOam :: Int -> Word8 -> Seq ObjAttr -> Seq ObjAttr
 writeOam av v mem = case oai of
-        0 -> mem&ix idx.xPos .~ v
-        1 -> mem&ix idx.yPos .~ v
+        0 -> mem&ix idx.yPos .~ v
+        1 -> mem&ix idx.xPos .~ v
+        2 -> mem&ix idx.tlIdx .~ v
         _ -> undefined
 
     where idx = fromIntegral $ av `rem` 40
@@ -154,7 +159,7 @@ writeByte idx v mem = do
         WRam1  i -> mem&wram1.ix i .~ v
         EWRam0 _ -> mem
         EWRam1 _ -> mem
-        OAM    _ -> mem
+        OAM    i -> mem&oam %~ writeOam i v
         NoUse  _ -> mem
         IOReg  i -> let rdOnly = [0x44] in
             if i `notElem` rdOnly then 

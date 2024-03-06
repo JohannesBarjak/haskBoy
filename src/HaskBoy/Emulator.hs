@@ -5,7 +5,10 @@
 
 module HaskBoy.Emulator where
 
-import HaskBoy.Mmu (Mmu(..))
+import HaskBoy.Mmu
+    ( Mmu(..)
+    , ObjAttr(..)
+    )
 
 import HaskBoy.Cpu
     ( Cpu(..)
@@ -23,9 +26,9 @@ import Data.Sequence qualified as Seq
 import Control.Lens
 
 data Emulator = Emulator
-    { _mmu :: Mmu
-    , _cpu :: Cpu
-    , _ppu :: Ppu
+    { _mmu :: !Mmu
+    , _cpu :: !Cpu
+    , _ppu :: !Ppu
     }
 
 makeLenses ''Emulator
@@ -39,7 +42,7 @@ toMemory xs = if length xs == 0x8000
             let _eram  = Seq.replicate 0x2000 0
             let _wram0 = Seq.replicate 0x1000 0
             let _wram1 = Seq.replicate 0x1000 0
-            let _oam   = Seq.replicate 0xA0 0
+            let _oam   = Seq.replicate 40 (ObjAttr 0 0)
             let _ioreg = Seq.replicate 0x80 0
             let _hram  = Seq.replicate 0x7F 0
             let _ie    = 0
