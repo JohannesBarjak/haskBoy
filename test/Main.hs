@@ -84,7 +84,7 @@ testToColor =
 
     where result :: Word8 -> Pixel -> Color
           result palette pixel = flip evalState testMmu $ do
-            raw 0xFF47 .= palette
+            ioreg.ix 0x47 .= palette
             toColor pixel
 
 testRegisters :: Spec
@@ -130,7 +130,7 @@ testMmu = Mmu
         , _eram  = Seq.replicate 0x2000 0
         , _wram0 = Seq.replicate 0x1000 0
         , _wram1 = Seq.replicate 0x1000 0
-        , _oam   = Seq.replicate 40 (ObjAttr 0 0)
+        , _oam   = Seq.replicate 40 (ObjAttr 0 0 0)
         , _ioreg = Seq.replicate 0x80 0
         , _hram  = Seq.replicate 0x7F 0
         , _ie    = 0

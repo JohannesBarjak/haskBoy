@@ -4,8 +4,10 @@
 module HaskBoy.Mmu
     ( Address
     , Mmu(..)
+    , rom0, rom1
+    , vram, eram, wram0, wram1
+    , oam, ioreg, hram, ie
     , addr, addr16
-    , raw
     , ObjAttr(..)
     , yPos, xPos, tlIdx
     ) where
@@ -62,27 +64,9 @@ addr :: Address -> Lens' Mmu Word8
 addr i = lens (readByte i) (flip $ writeByte i)
 
 -- | Provides restricted access to a Word in the 'Mmu'.
--- The Word is created by a least and most significant byte
--- in little endian order
+-- The Word is created by a pair of bytes in little endian order.
 addr16 :: Address -> Lens' Mmu Word16
 addr16 i = lens (readWord i) (flip $ writeWord i)
-
--- | Unrestricted access to the 'Mmu'
-raw :: Address -> Lens' Mmu Word8
-raw idx = lens (readByte idx) $ \mem v -> case addrType idx of
-    Bank0  i -> mem&rom0.ix i .~ v
-    Bank1  i -> mem&rom1.ix i .~ v
-    VRam   i -> mem&vram.ix i .~ v
-    ERam   i -> mem&eram.ix i .~ v
-    WRam0  i -> mem&wram0.ix i .~ v
-    WRam1  i -> mem&wram1.ix i .~ v
-    EWRam0 i -> mem&wram0.ix i .~ v
-    EWRam1 i -> mem&wram1.ix i .~ v
-    OAM    i -> mem&oam %~ writeOam i v
-    NoUse  _ -> mem
-    IOReg  i -> mem&ioreg.ix i .~ v
-    HRam   i -> mem&hram.ix i .~ v
-    Ie       -> mem&ie .~ v
 
 readWord :: Address -> Mmu -> Word16
 readWord i mmu' = fromIntegral ub `shiftL` 8 .|. fromIntegral lb
@@ -94,7 +78,7 @@ writeWord i v mmu' = writeByte i lb $ writeByte (i + 1) ub mmu'
     where ub = fromIntegral $ v `shiftR` 8
           lb = fromIntegral $ v .&. 0xFF
 
--- Map an address to the appropriate memory type
+-- Map an address to the appropriate memory type.
 addrType :: Address -> AddrType
 addrType i
     | inRange (0x0000, 0x3FFF) i = Bank0  $ fromIntegral i

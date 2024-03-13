@@ -10,7 +10,7 @@ module HaskBoy.Ppu
     , display, clock
     ) where
 
-import HaskBoy.Mmu (Mmu, raw)
+import HaskBoy.Mmu (Mmu, ioreg)
 
 import Test.QuickCheck.Arbitrary
 
@@ -23,8 +23,8 @@ import Data.Bits (Bits((.&.), shiftR))
 type Display = Seq (Seq Pixel)
 
 data Ppu = Ppu
-    { _display :: Display -- ^ Gameboy's 256x256 logical display
-    , _clock   :: Integer
+    { _display :: !Display -- ^ Gameboy's 160x144 physical display
+    , _clock   :: !Integer
     }
 
 data Color
@@ -64,7 +64,7 @@ toPixel lb ub = toEnum (fromEnum ub * 2 + fromEnum lb)
 -- at 0xFF47 to convert a 'Pixel' into a 'Color'
 toColor :: Pixel -> State Mmu Color
 toColor pixel = do
-    palette <- use (raw 0xFF47)
+    palette <- (^?!ix 0x47) <$> use ioreg
     let color = fromIntegral (palette `shiftR` (fromEnum pixel * 2)) .&. 3
 
     pure (toEnum color)

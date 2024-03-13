@@ -36,17 +36,19 @@ makeLenses ''Emulator
 toMemory :: [Word8] -> Maybe Mmu
 toMemory xs = if length xs == 0x8000
         then do
-            let _rom0  = Seq.fromList r0
-            let _rom1  = Seq.fromList r1
-            let _vram  = Seq.replicate 0x2000 0
-            let _eram  = Seq.replicate 0x2000 0
-            let _wram0 = Seq.replicate 0x1000 0
-            let _wram1 = Seq.replicate 0x1000 0
-            let _oam   = Seq.replicate 40 (ObjAttr 0 0)
-            let _ioreg = Seq.replicate 0x80 0
-            let _hram  = Seq.replicate 0x7F 0
-            let _ie    = 0
-            Just $ Mmu {..}
+            Just $ Mmu
+                { _rom0  = Seq.fromList r0
+                , _rom1  = Seq.fromList r1
+                , _vram  = Seq.replicate 0x2000 0
+                , _eram  = Seq.replicate 0x2000 0
+                , _wram0 = Seq.replicate 0x1000 0
+                , _wram1 = Seq.replicate 0x1000 0
+                , _oam   = Seq.replicate 40 (ObjAttr 0 0 0)
+                , _ioreg = Seq.replicate 0x80 0
+                , _hram  = Seq.replicate 0x7F 0
+                , _ie    = 0
+                }
+
         else Nothing
         where (r0,r1) = splitAt 0x4000 xs
 

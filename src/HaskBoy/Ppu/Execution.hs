@@ -90,18 +90,18 @@ tileRow (v1,v2) = Seq.zipWith toPixel (toBits v1) (toBits v2)
           toBits v = Seq.fromList $ [toBool $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
 
 ppuMode :: Lens' Mmu Pixel
-ppuMode = lens _ppuMode $ \mmu' v ->
-    mmu'&raw 0xFF41 .~ ((mmu'^?!raw 0xFF41) .&. 0xFC) .|. fromIntegral (fromEnum v)
+ppuMode = lens _ppuMode $ \mem v ->
+    mem&ioreg.ix 0x41 .~ ((mem^?!ioreg.ix 0x41) .&. 0xFC) .|. fromIntegral (fromEnum v)
 
 _ppuMode :: Mmu -> Pixel
-_ppuMode mmu' = toEnum . fromIntegral $ (mmu'^?!raw 0xFF41) .&. 3
+_ppuMode mem = toEnum . fromIntegral $ (mem^?!ioreg.ix 0x41) .&. 3
 
 scx, scy :: Lens' Mmu Word8
-scx = raw 0xFF43
-scy = raw 0xFF42
+scx = lens (^?!ioreg.ix 0x43) (\mem v -> mem&ioreg.ix 0x43 .~ v)
+scy = lens (^?!ioreg.ix 0x42) (\mem v -> mem&ioreg.ix 0x42 .~ v)
 
 lyc :: Lens' Mmu Word8
-lyc = raw 0xFF45
+lyc = lens (^?!ioreg.ix 0x45) (\mem v -> mem&ioreg.ix 0x45 .~ v)
 
 ly :: Lens' Mmu (Mod8.Mod 154)
-ly = lens (fromIntegral . (^.raw 0xFF44)) (\mem v -> mem&raw 0xFF44 .~ fromIntegral (Mod8.unMod v))
+ly = lens (fromIntegral . (^?!ioreg.ix 0x44)) (\mem v -> mem&ioreg.ix 0x44 .~ fromIntegral (Mod8.unMod v))
