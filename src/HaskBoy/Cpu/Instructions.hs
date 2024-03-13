@@ -3,23 +3,24 @@
 
 module HaskBoy.Cpu.Instructions
     ( inc, dec
-    , byteAnd, xor, byteOr
+    , and, xor, or
     , jr, call, jmp, ret
     , cmp
     , add, sub, sbc
-    , rl, bit
+    , add16
+    , rl, bit, swap
     , consumeByte, consumeWord
     , popStack, pushStack
     ) where
+
+import Prelude hiding (and, or)
 
 import HaskBoy.Emulator
 import HaskBoy.Mmu
 import HaskBoy.Cpu
 
-import Debug.Trace (traceM)
-
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits((.&.), (.|.), shiftL))
+import Data.Bits (Bits((.&.), (.|.), shiftL), (.<<.), (.>>.))
 import Data.Bits qualified as Bits
 
 import Control.Monad.State.Strict
@@ -27,27 +28,27 @@ import Control.Lens
 
 import Foreign.Marshal.Utils (fromBool, toBool)
 
-inc :: Lens' Emulator Word8 -> State Emulator ()
+inc :: ALens' Emulator Word8 -> State Emulator ()
 inc r = do
-    v <- use r
+    v <- use (cloneLens r)
     let result = v + 1
 
     cpu.register.zero .= (result == 0)
     cpu.register.hcarry .= (v .&. 0xF == 0xF)
     cpu.register.subOp .= False
 
-    r .= result
+    cloneLens r .= result
 
-dec :: Lens' Emulator Word8 -> State Emulator ()
+dec :: ALens' Emulator Word8 -> State Emulator ()
 dec r = do
-    v <- use r
+    v <- use (cloneLens r)
     let result = v - 1
 
     cpu.register.zero .= (result == 0)
     cpu.register.hcarry .= (v .&. 0xF == 0)
     cpu.register.subOp .= True
 
-    r .= result
+    cloneLens r .= result
 
 jr :: Bool -> State Emulator ()
 jr jump = do
@@ -56,19 +57,19 @@ jr jump = do
 
     if jump then do
         jmp $ fromIntegral (nn + twoCompl sb)
-        traceM $ "signed byte: " ++ show (twoCompl sb)
         cpu.tclock += 12
 
     else cpu.tclock += 8
 
-cmp :: Word8 -> State Registers ()
-cmp n = do
-    a' <- use a
+cmp :: ALens' Emulator Word8 -> State Emulator ()
+cmp r = do
+    a' <- use (cpu.register.a)
+    n <- use (cloneLens r)
 
-    zero .= (a' == n)
-    carry .= (a' < n)
-    hcarry .= (a' .&. 0xF < n .&. 0xF)
-    subOp .= True
+    cpu.register.zero .= (a' == n)
+    cpu.register.carry .= (a' < n)
+    cpu.register.hcarry .= (a' .&. 0xF < n .&. 0xF)
+    cpu.register.subOp .= True
 
 call :: Address -> State Emulator ()
 call nn = do
@@ -81,42 +82,56 @@ jmp nn = cpu.register.pc .= nn
 ret :: State Emulator ()
 ret = jmp =<< popStack
 
-sbc :: Word8 -> State Registers ()
+sbc :: Word8 -> State Emulator ()
 sbc n = do
-    a' <- use a
-    carry' <- use carry
+    a' <- use (cpu.register.a)
+    carry' <- use (cpu.register.carry)
     let result = a' - n + fromBool carry'
 
-    zero .= (result == 0)
-    hcarry .= (a' .&. 0xF < (n .&. 0xF) + fromBool carry')
-    carry .= (fromIntegral a' < (fromIntegral n + fromBool carry' :: Int))
-    subOp .= True
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= (a' .&. 0xF < (n .&. 0xF) + fromBool carry')
+    cpu.register.carry .= (fromIntegral a' < (fromIntegral n + fromBool carry' :: Int))
+    cpu.register.subOp .= True
 
-    a .= result
+    cpu.register.a .= result
 
-add :: Word8 -> State Registers ()
+add :: Word8 -> State Emulator ()
 add n = do
-    a' <- use a
+    a' <- use (cpu.register.a)
     let result = a' + n
 
-    zero .= (result == 0)
-    hcarry .= ((a' .&. 0xF) + (n .&. 0xF) > 0xF)
-    carry .= (fromIntegral a' + fromIntegral n > (0xFF :: Int))
-    subOp .= False
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= ((a' .&. 0xF) + (n .&. 0xF) > 0xF)
+    cpu.register.carry .= (toInteger a' + toInteger n > 0xFF)
+    cpu.register.subOp .= False
 
-    a .= result
+    cpu.register.a .= result
 
-sub :: Word8 -> State Registers ()
+add16 :: ALens' Emulator Word16 -> State Emulator ()
+add16 wl = do
+    v <- use (cpu.register.hl)
+    w <- use (cloneLens wl)
+
+    cpu.register.hcarry .= ((v .&. 0x07FF) + (w .&. 0x07FF) > 0x07FF)
+    cpu.register.carry .= (v > 0xFFFF - w)
+    cpu.register.subOp .= False
+
+    cpu.register.hl .= v + w
+
+sub :: ALens' Emulator Word8 -> State Emulator ()
 sub n = do
     -- Subtraction in the Gameboy sets flags in the same way as comparison
     cmp n
-    a -= n
+    v <- use (cloneLens n)
+    cpu.register.a -= v
 
-bit :: Int -> Word8 -> State Registers ()
-bit n v = do
-    zero .= (v .&. shiftL 1 n == 0)
-    hcarry .= True
-    subOp .= False
+bit :: Int -> ALens' Emulator Word8 -> State Emulator ()
+bit n r = do
+    v <- use (cloneLens r)
+
+    cpu.register.zero .= (v .&. shiftL 1 n == 0)
+    cpu.register.hcarry .= True
+    cpu.register.subOp .= False
 
 rl :: Lens' Registers Word8 -> State Emulator ()
 rl r = zoom cpu $ do
@@ -136,41 +151,55 @@ rl r = zoom cpu $ do
             v <- use (register.r)
             pure $ toBool (v .&. (1 `shiftL` 7))
 
-byteOr :: Word8 -> State Registers ()
-byteOr n = do
-    a' <- use a
+-- This instructions swaps nibbles
+swap :: ALens' Emulator Word8 -> State Emulator ()
+swap r = do
+    v <- use (cloneLens r)
+    let result = v .>>. 4 .|. v .<<. 4;
+
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= False
+    cpu.register.carry .= False
+    cpu.register.subOp .= False
+
+    cloneLens r .= result
+
+or :: ALens' Emulator Word8 -> State Emulator ()
+or vl = do
+    a' <- use (cpu.register.a)
+    n <- use (cloneLens vl)
     let result = a' .|. n
 
-    zero .= (result == 0)
-    hcarry .= False
-    carry .= False
-    subOp .= False
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= False
+    cpu.register.carry .= False
+    cpu.register.subOp .= False
 
-    a .= result
+    cpu.register.a .= result
 
-xor :: Word8 -> State Registers ()
+xor :: Word8 -> State Emulator ()
 xor n = do
-    a' <- use a
+    a' <- use (cpu.register.a)
     let result = Bits.xor a' n
 
-    zero .= (result == 0)
-    hcarry .= False
-    carry .= False
-    subOp .= False
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= False
+    cpu.register.carry .= False
+    cpu.register.subOp .= False
 
-    a .= result
+    cpu.register.a .= result
 
-byteAnd :: Word8 -> State Registers ()
-byteAnd n = do
-    a' <- use a
+and :: Word8 -> State Emulator ()
+and n = do
+    a' <- use (cpu.register.a)
     let result = a' .&. n
 
-    zero .= (result == 0)
-    hcarry .= True
-    carry .= False
-    subOp .= False
+    cpu.register.zero .= (result == 0)
+    cpu.register.hcarry .= True
+    cpu.register.carry .= False
+    cpu.register.subOp .= False
 
-    a .= result
+    cpu.register.a .= result
 
 -- Read the current and following byte as a 16-bit word
 -- and then increase the pc register by 2

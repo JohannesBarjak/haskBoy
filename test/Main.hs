@@ -36,7 +36,6 @@ main = do
             testToColor
         describe "HaskBoy.Ppu.Execution" $ do
             testTileRow
-            testGetTile
 
     quickCheck prop_DecBCRegs
     quickCheck prop_StackFunConsistency
@@ -85,7 +84,7 @@ testToColor =
 
     where result :: Word8 -> Pixel -> Color
           result palette pixel = flip evalState testMmu $ do
-            raw 0xFF47 .= palette
+            ioreg.ix 0x47 .= palette
             toColor pixel
 
 testRegisters :: Spec
@@ -116,14 +115,6 @@ testTileRow =
         it "always returns odd enums when the first byte is 0xFF" $
             property $ \v -> all (odd . fromEnum) (tileRow (0xFF,v))
 
-testGetTile :: Spec
-testGetTile =
-    describe "getTile" $ do
-        it "always returns an 8x8 tile" $
-            property $ \v -> flip evalState testMmu $ do
-                tile <- getTile v
-                pure (length tile == 8 && all ((== 8) . V.length) tile)
-
 testEmulator :: Emulator
 testEmulator = Emulator
     { _mmu = testMmu
@@ -139,7 +130,7 @@ testMmu = Mmu
         , _eram  = Seq.replicate 0x2000 0
         , _wram0 = Seq.replicate 0x1000 0
         , _wram1 = Seq.replicate 0x1000 0
-        , _oam   = Seq.replicate 0xA0 0
+        , _oam   = Seq.replicate 40 (ObjAttr 0 0 0)
         , _ioreg = Seq.replicate 0x80 0
         , _hram  = Seq.replicate 0x7F 0
         , _ie    = 0
@@ -161,7 +152,7 @@ testCpu = Cpu
 
 testPpu :: Ppu
 testPpu = Ppu
-    { _display = V.replicate (256 * 256) (toPixel False False)
+    { _display = Seq.replicate 256 . Seq.replicate 256 $ (toPixel False False)
     , _clock   = 0
     }
 

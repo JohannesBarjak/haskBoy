@@ -26,17 +26,12 @@ import HaskBoy.Ppu.Execution
 import Control.Monad.State.Strict
 import Control.Lens
 
-import Data.Vector qualified as V
-import Data.Vector (Vector)
+import Data.Sequence as Seq
+
 import Foreign (castPtr, Storable (pokeElemOff), Ptr)
 import Data.Bits
 
-import Control.Monad (when, forM_)
-
-import Debug.Trace (traceM)
-import Numeric (showHex)
-
-import Data.List (intercalate)
+import Control.Monad (when, forM_, join)
 
 hzps, fps, hzpf :: Integer
 hzps = 4194304
@@ -51,19 +46,19 @@ main = do
     SDL.initializeAll
 
     let windowConfig = SDL.defaultWindow 
-            { SDL.windowInitialSize = SDL.V2 256 256
+            { SDL.windowInitialSize = SDL.V2 320 288
             , SDL.windowResizable = True
             }
 
     window <- SDL.createWindow "GameBoy" windowConfig
     renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
 
-    SDL.rendererLogicalSize renderer $= Just (SDL.V2 256 256)
+    SDL.rendererLogicalSize renderer $= Just (SDL.V2 160 144)
 
     filename <- head <$> getArgs
     (Just rom) <- toMemory <$> loadRom filename
 
-    emulatorLoop renderer (initialEmulator rom)
+    emulatorLoop renderer (initialEmulator rom) 0
 
     SDL.destroyRenderer renderer
     SDL.destroyWindow window
@@ -79,67 +74,61 @@ cycleCpu cycles
         instr <- consumeByte
         execute =<< toInstruction instr
 
-        printCpuDbgInfo instr
-
         instrCost <- use (cpu.tclock)
-        runlyTiming (cycles - instrCost)
         cpu.tclock .= 0
+
+        ppu.clock += instrCost
+
+        ppuTime <- use (ppu.clock)
+
+        when (ppuTime > 455) $ do
+            ppu.clock -= 456
+            mmu.ly += 1
+
+            lineY <- use (mmu.ly)
+            when (lineY < 144) drawTiles
 
         cycleCpu (cycles - instrCost)
 
-runlyTiming :: Integer -> State Emulator ()
-runlyTiming cycles = do
-    mmu.ly .= fromIntegral (((hzpf - cycles) `quot` 456) `rem` 154)
+emulatorLoop :: SDL.Renderer -> Emulator -> Integer -> IO ()
+emulatorLoop renderer emulator cycles = do
+    _ <- SDL.pollEvents
 
-printCpuDbgInfo :: Word8 -> State Emulator ()
-printCpuDbgInfo instr = do
-    address <- ("$"  ++) . flip showHex "" <$> use (cpu.register.pc)
-    afreg <- ("af: " ++) . flip showHex "" <$> use (cpu.register.af)
-    bcreg <- ("bc: " ++) . flip showHex "" <$> use (cpu.register.bc)
-    dereg <- ("de: " ++) . flip showHex "" <$> use (cpu.register.de)
-    hlreg <- ("hl: " ++) . flip showHex "" <$> use (cpu.register.hl)
-    spreg <- ("sp: " ++) . flip showHex "" <$> use (cpu.register.sp)
-    lyreg <- ("ly: " ++) . flip showHex "" <$> use (mmu.ly)
-    let instruction = "instr: 0x" ++ showHex instr ""
+    start <- SDL.Raw.getPerformanceCounter
 
-    traceM $
-        intercalate " | " [address, afreg, bcreg, dereg, hlreg, spreg, lyreg, instruction]
+    let (rawdp, emulator') = runState (cycleCpu cycles *> rawDisplay) emulator
+    renderGbDisplay rawdp renderer
 
-emulatorLoop :: SDL.Renderer -> Emulator -> IO ()
-emulatorLoop renderer emulator = do
-    start <- SDL.Raw.getTicks
+    end <- SDL.Raw.getPerformanceCounter
+    freq <- SDL.Raw.getPerformanceFrequency
 
-    let (rawdp, emulator') = runState (cycleCpu hzpf *> drawTiles *> rawDisplay) emulator
+    emulatorLoop renderer emulator' (newCycles end start freq)
 
+    where newCycles end start freq = round (fromIntegral hzps * (fromIntegral (end - start) / fromIntegral freq) :: Double)
+
+renderGbDisplay :: Seq Word8 -> SDL.Renderer -> IO ()
+renderGbDisplay dp renderer = do
     text <- gbTexture renderer
     (pixelPtr, _) <- SDL.lockTexture text Nothing
 
     let (pixels :: Ptr Word8) = castPtr pixelPtr
 
-    forM_ [0..(256 * 256) - 1] $ \i -> do
+    forM_ [0..(160 * 144) - 1] $ \i -> do
         forM_ [0..2] $ \j -> do
-            pokeElemOff pixels ((i * 3) + j) (rawdp V.! i)
+            pokeElemOff pixels ((i * 3) + j) (Seq.index dp i)
 
     SDL.unlockTexture text
 
+    SDL.clear renderer
     SDL.copy renderer text Nothing Nothing
     SDL.present renderer
 
-    end <- SDL.Raw.getTicks
-
-    let time = fromIntegral $ end - start
-
-    when (time < frameTime) $ do
-        SDL.delay $ round (frameTime - time)
-
-    emulatorLoop renderer emulator'
-
-rawDisplay :: State Emulator (Vector Word8)
-rawDisplay = mapM colorIndexToPixel =<< use (ppu.display)
+rawDisplay :: State Emulator (Seq Word8)
+rawDisplay = mapM colorIndexToPixel . join =<< use (ppu.display)
 
 colorIndexToPixel :: Pixel -> State Emulator Word8
 colorIndexToPixel ci = do
-    palette <- use (mmu.raw 0xFF47)
+    palette <- (^?!ioreg.ix 0x47) <$> use mmu
     let color = fromIntegral (palette `shiftR` (fromEnum ci * 2)) .&. 3
     pure $ ciToPixel (toEnum color)
     where ciToPixel White     = 255
@@ -149,4 +138,4 @@ colorIndexToPixel ci = do
 
 gbTexture :: SDL.Renderer -> IO SDL.Texture
 gbTexture renderer = SDL.createTexture
-    renderer SDL.RGB24 SDL.TextureAccessStreaming (SDL.V2 256 256)
+    renderer SDL.RGB24 SDL.TextureAccessStreaming (SDL.V2 160 144)

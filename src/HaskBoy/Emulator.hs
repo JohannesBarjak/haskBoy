@@ -5,7 +5,10 @@
 
 module HaskBoy.Emulator where
 
-import HaskBoy.Mmu (Mmu(..))
+import HaskBoy.Mmu
+    ( Mmu(..)
+    , ObjAttr(..)
+    )
 
 import HaskBoy.Cpu
     ( Cpu(..)
@@ -18,15 +21,14 @@ import HaskBoy.Ppu
     )
 
 import Data.Word (Word8)
-import Data.Vector qualified as V
 import Data.Sequence qualified as Seq
 
 import Control.Lens
 
 data Emulator = Emulator
-    { _mmu :: Mmu
-    , _cpu :: Cpu
-    , _ppu :: Ppu
+    { _mmu :: !Mmu
+    , _cpu :: !Cpu
+    , _ppu :: !Ppu
     }
 
 makeLenses ''Emulator
@@ -34,17 +36,19 @@ makeLenses ''Emulator
 toMemory :: [Word8] -> Maybe Mmu
 toMemory xs = if length xs == 0x8000
         then do
-            let _rom0  = Seq.fromList r0
-            let _rom1  = Seq.fromList r1
-            let _vram  = Seq.replicate 0x2000 0
-            let _eram  = Seq.replicate 0x2000 0
-            let _wram0 = Seq.replicate 0x1000 0
-            let _wram1 = Seq.replicate 0x1000 0
-            let _oam   = Seq.replicate 0xA0 0
-            let _ioreg = Seq.replicate 0x80 0
-            let _hram  = Seq.replicate 0x7F 0
-            let _ie    = 0
-            Just $ Mmu {..}
+            Just $ Mmu
+                { _rom0  = Seq.fromList r0
+                , _rom1  = Seq.fromList r1
+                , _vram  = Seq.replicate 0x2000 0
+                , _eram  = Seq.replicate 0x2000 0
+                , _wram0 = Seq.replicate 0x1000 0
+                , _wram1 = Seq.replicate 0x1000 0
+                , _oam   = Seq.replicate 40 (ObjAttr 0 0 0)
+                , _ioreg = Seq.replicate 0x80 0
+                , _hram  = Seq.replicate 0x7F 0
+                , _ie    = 0
+                }
+
         else Nothing
         where (r0,r1) = splitAt 0x4000 xs
 
@@ -71,6 +75,6 @@ initialCpu = Cpu
 
 initialPpu :: Ppu
 initialPpu = Ppu
-    { _display = V.fromList $ replicate (256 * 256) (toPixel False False)
+    { _display = Seq.replicate 144 $ Seq.replicate 160 (toPixel False False)
     , _clock   = 0
     }

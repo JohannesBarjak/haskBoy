@@ -4,8 +4,12 @@
 module HaskBoy.Mmu
     ( Address
     , Mmu(..)
+    , rom0, rom1
+    , vram, eram, wram0, wram1
+    , oam, ioreg, hram, ie
     , addr, addr16
-    , raw
+    , ObjAttr(..)
+    , yPos, xPos, tlIdx
     ) where
 
 import Control.Lens
@@ -17,63 +21,52 @@ import Data.Bits
 import Data.Ix (Ix(inRange))
 
 data Mmu = Mmu
-    { _rom0  :: Seq Word8
-    , _rom1  :: Seq Word8
-    , _vram  :: Seq Word8
-    , _eram  :: Seq Word8
-    , _wram0 :: Seq Word8
-    , _wram1 :: Seq Word8
-    , _oam   :: Seq Word8
-    , _ioreg :: Seq Word8
-    , _hram  :: Seq Word8
-    , _ie    :: Word8
+    { _rom0  :: !(Seq Word8)
+    , _rom1  :: !(Seq Word8)
+    , _vram  :: !(Seq Word8)
+    , _eram  :: !(Seq Word8)
+    , _wram0 :: !(Seq Word8)
+    , _wram1 :: !(Seq Word8)
+    , _oam   :: !(Seq ObjAttr)
+    , _ioreg :: !(Seq Word8)
+    , _hram  :: !(Seq Word8)
+    , _ie    :: !Word8
+    }
+
+data ObjAttr = ObjAttr
+    { _yPos  :: !Word8
+    , _xPos  :: !Word8
+    , _tlIdx :: !Word8
     }
 
 type Address = Word16
 
 data AddrType
-    = Bank0 Int
-    | Bank1 Int
-    | VRam Int
-    | ERam Int
-    | WRam0 Int
-    | WRam1 Int
-    | EWRam0 Int
-    | EWRam1 Int
-    | OAM Int
-    | NoUse Int
-    | IOReg Int
-    | HRam Int
+    = Bank0 !Int
+    | Bank1 !Int
+    | VRam !Int
+    | ERam !Int
+    | WRam0 !Int
+    | WRam1 !Int
+    | EWRam0 !Int
+    | EWRam1 !Int
+    | OAM !Int
+    | NoUse !Int
+    | IOReg !Int
+    | HRam !Int
     | Ie
 
 makeLenses ''Mmu
+makeLenses ''ObjAttr
 
 -- | Restricted access to the 'Mmu'
 addr :: Address -> Lens' Mmu Word8
 addr i = lens (readByte i) (flip $ writeByte i)
 
 -- | Provides restricted access to a Word in the 'Mmu'.
--- The Word is created by a least and most significant byte
--- in little endian order
+-- The Word is created by a pair of bytes in little endian order.
 addr16 :: Address -> Lens' Mmu Word16
 addr16 i = lens (readWord i) (flip $ writeWord i)
-
--- | Unrestricted access to the 'Mmu'
-raw :: Address -> Lens' Mmu Word8
-raw idx = lens (readByte idx) $ \mem v -> case addrType idx of
-    Bank0  i -> mem&rom0.ix i .~ v
-    Bank1  i -> mem&rom1.ix i .~ v
-    VRam   i -> mem&vram.ix i .~ v
-    ERam   i -> mem&eram.ix i .~ v
-    WRam0  i -> mem&wram0.ix i .~ v
-    WRam1  i -> mem&wram1.ix i .~ v
-    EWRam0 i -> mem&wram0.ix i .~ v
-    EWRam1 i -> mem&wram1.ix i .~ v
-    OAM    i -> mem&oam.ix i .~ v
-    NoUse  _ -> mem
-    IOReg  i -> mem&ioreg.ix i .~ v
-    HRam   i -> mem&oam.ix i .~ v
-    Ie       -> mem&ie .~ v
 
 readWord :: Address -> Mmu -> Word16
 readWord i mmu' = fromIntegral ub `shiftL` 8 .|. fromIntegral lb
@@ -85,7 +78,7 @@ writeWord i v mmu' = writeByte i lb $ writeByte (i + 1) ub mmu'
     where ub = fromIntegral $ v `shiftR` 8
           lb = fromIntegral $ v .&. 0xFF
 
--- Map an address to the appropriate memory type
+-- Map an address to the appropriate memory type.
 addrType :: Address -> AddrType
 addrType i
     | inRange (0x0000, 0x3FFF) i = Bank0  $ fromIntegral i
@@ -113,11 +106,31 @@ readByte idx mem = do
         WRam1  i -> mem^?!wram1.ix i
         EWRam0 i -> mem^?!wram0.ix i
         EWRam1 i -> mem^?!wram1.ix i
-        OAM    i -> mem^?!oam.ix i
+        OAM    i -> readOam (mem^.oam) i
         NoUse  _ -> 0xFF
         IOReg  i -> mem^?!ioreg.ix i
         HRam   i -> mem^?!hram.ix i
         Ie       -> mem^?!ie
+
+readOam :: Seq ObjAttr -> Int -> Word8
+readOam mem av = extractByte oai $ mem^?!ix idx
+    where idx = fromIntegral $ av `rem` 40
+          oai = av `rem` 4
+
+          extractByte 0 (ObjAttr y _  _) = y
+          extractByte 1 (ObjAttr _ x  _) = x
+          extractByte 2 (ObjAttr _ _ tI) = tI
+          extractByte _ _ = undefined
+
+writeOam :: Int -> Word8 -> Seq ObjAttr -> Seq ObjAttr
+writeOam av v mem = case oai of
+        0 -> mem&ix idx.yPos .~ v
+        1 -> mem&ix idx.xPos .~ v
+        2 -> mem&ix idx.tlIdx .~ v
+        _ -> undefined
+
+    where idx = fromIntegral $ av `rem` 40
+          oai = av `rem` 4
 
 writeByte :: Address -> Word8 -> Mmu -> Mmu
 writeByte idx v mem = do
@@ -130,7 +143,7 @@ writeByte idx v mem = do
         WRam1  i -> mem&wram1.ix i .~ v
         EWRam0 _ -> mem
         EWRam1 _ -> mem
-        OAM    _ -> mem
+        OAM    i -> mem&oam %~ writeOam i v
         NoUse  _ -> mem
         IOReg  i -> let rdOnly = [0x44] in
             if i `notElem` rdOnly then 

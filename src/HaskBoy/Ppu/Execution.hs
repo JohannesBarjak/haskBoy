@@ -1,85 +1,75 @@
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
 
 module HaskBoy.Ppu.Execution
-    ( drawTiles, writeTiles
-    , tiles, tileMaps
-    , getTile, tileRow
+    ( drawTiles
+    , bgScanline
+    , tileMaps
+    , getTileRow, tileRow
     , scx, scy
     , ly, lyc
-    , ppumode, _ppumode
-    , bgTileData
+    , ppuMode
     ) where
 
 import HaskBoy.Emulator
 
 import HaskBoy.Mmu
 import HaskBoy.Ppu
-import HaskBoy.BitOps
+import HaskBoy.Ppu.LcdControl
 
 import Control.Lens
 import Control.Monad.State.Strict
 
-import Data.Vector (Vector)
-import Data.Vector qualified as V
+import Data.Sequence (Seq)
+import Data.Sequence qualified as Seq
+
+import Data.Mod.Word qualified as Mod8
 
 import Data.Bits (Bits((.&.), shiftR, (.|.)))
 import Data.Word (Word8)
 import Foreign.Marshal (toBool)
 
-import Data.Foldable (for_)
-
-import Control.Monad.ST
-import Data.Vector.Mutable qualified as VM
-
-type Tile = Vector (Vector Pixel)
+import Control.Applicative (Applicative(liftA2))
 
 drawTiles :: State Emulator ()
 drawTiles = do
-    t <- zoom mmu tiles
-    dp <- use (ppu.display)
+    lineY <- use (mmu.ly)
+    ppu.display.ix (fromIntegral $ Mod8.unMod lineY) <~ zoom mmu bgScanline
 
-    ppu.display .= writeTiles t dp
+drawSprites :: State Emulator ()
+drawSprites = undefined
 
-writeTiles :: [Tile] -> Display -> Display
-writeTiles ts dp = runST $ do
-    mdp <- V.thaw dp
-    for_ (zip [0..] ts) $ \(i, tile) -> do
-        let x = (i `mod` 32) * 8
-        let y = (i `div` 32) * 8
+bgScanline :: State Mmu (Seq Pixel)
+bgScanline = do
+    scrollX <- use scx
+    bgScan <- bgScanlineRow =<< liftA2 (+) (use scy) (fromIntegral . Mod8.unMod <$> use ly)
 
-        writeTile mdp (x,y) tile
-    V.freeze mdp
+    let bgEnd = Seq.drop (fromIntegral scrollX) bgScan
 
-writeTile :: VM.PrimMonad m => VM.MVector (VM.PrimState m) Pixel -> (Int, Int) -> Tile -> m ()
-writeTile mdp (x,y) tile = do
-    for_ (V.indexed tile) $ \(j, row) -> do
-        for_ (V.indexed row) $ \(i, pixel) -> do
-            VM.write mdp (dpIndex (x + i) (y + j)) pixel
-    where dpIndex i j = (j * 256) + i
+    pure $ if Seq.length bgEnd >= 160 then
+            Seq.take 160 bgEnd else undefined
 
-tiles :: State Mmu [Tile]
-tiles = traverse getTile =<< tileMaps
+bgScanlineRow :: Word8 -> State Mmu (Seq Pixel)
+bgScanlineRow y = fmap join $ traverse (getTileRow rowIndex) =<< tileMaps tileIndex
+    where (tileIndex, rowIndex) = (y `quotRem` 8)&both %~ fromIntegral
 
-tileMaps :: State Mmu [Word8]
-tileMaps = sequence $ do
-    i <- [0..1023]
+tileMaps :: Integer -> State Mmu (Seq Word8)
+tileMaps tileIndex = sequence $ do
+    i <- fromIntegral <$> Seq.fromList [tileIndex * 32..(tileIndex * 32) + 32]
     pure $ use (addr (0x9800 + i))
 
--- | Get a tile using an index, which should come from one of the Gameboy's tilemaps
-getTile :: Word8 -> State Mmu Tile
-getTile tileIndex = do
+getTileRow :: Integer -> Word8 -> State Mmu (Seq Pixel)
+getTileRow rowIndex tileIndex = do
     bgtd <- use bgTileData
     let tileAddress = if bgtd then
             0x8000 + (fromIntegral tileIndex * 16)
         else 0x9000 + (fromIntegral (twoCompl tileIndex) * 16)
 
-    mapM (fmap tileRow . tileBytes . (tileAddress +) . (*2)) $ V.fromList [0..7]
+    tileRow <$> tileBytes (tileAddress + (fromIntegral rowIndex * 2))
 
     where tileBytes :: Address -> State Mmu (Word8, Word8)
-          tileBytes i = do
-            fstBits <- use (addr i)
-            sndBits <- use (addr $ i + 1)
-            pure (fstBits, sndBits)
+          tileBytes i = liftA2 (,) (use (addr i)) (use (addr $ i + 1))
 
 twoCompl :: Word8 -> Int
 twoCompl r8
@@ -92,31 +82,26 @@ tileRow
     ( Word8 -- ^ Lower bits
     , Word8 -- ^ Upper bits
     )
-    -> Vector Pixel
+    -> Seq Pixel
 
-tileRow (v1,v2) = V.fromList $ zipWith toPixel (toBits v1) (toBits v2)
+tileRow (v1,v2) = Seq.zipWith toPixel (toBits v1) (toBits v2)
 
-    where toBits :: Word8 -> [Bool]
-          toBits v = [toBool $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
+    where toBits :: Word8 -> Seq Bool
+          toBits v = Seq.fromList $ [toBool $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
 
-ppumode :: Lens' Mmu Pixel
-ppumode = lens _ppumode $ \mmu' v ->
-    mmu'&raw 0xFF41 .~ ((mmu'^?!raw 0xFF41) .&. 0xFC) .|. fromIntegral (fromEnum v)
+ppuMode :: Lens' Mmu Pixel
+ppuMode = lens _ppuMode $ \mem v ->
+    mem&ioreg.ix 0x41 .~ ((mem^?!ioreg.ix 0x41) .&. 0xFC) .|. fromIntegral (fromEnum v)
 
-_ppumode :: Mmu -> Pixel
-_ppumode mmu' = toEnum . fromIntegral $ (mmu'^?!raw 0xFF41) .&. 3
+_ppuMode :: Mmu -> Pixel
+_ppuMode mem = toEnum . fromIntegral $ (mem^?!ioreg.ix 0x41) .&. 3
 
 scx, scy :: Lens' Mmu Word8
-scx = raw 0xFF43
-scy = raw 0xFF42
+scx = lens (^?!ioreg.ix 0x43) (\mem v -> mem&ioreg.ix 0x43 .~ v)
+scy = lens (^?!ioreg.ix 0x42) (\mem v -> mem&ioreg.ix 0x42 .~ v)
 
 lyc :: Lens' Mmu Word8
-lyc = raw 0xFF45
+lyc = lens (^?!ioreg.ix 0x45) (\mem v -> mem&ioreg.ix 0x45 .~ v)
 
-ly :: Lens' Mmu Word8
-ly = raw 0xFF44
-
-bgTileData :: Lens' Mmu Bool
-bgTileData = lens (^.lcdc.bit 4) (\mmu' v -> mmu'&lcdc.bit 4 .~ v)
-    where lcdc :: Lens' Mmu Word8
-          lcdc = raw 0xFF40
+ly :: Lens' Mmu (Mod8.Mod 154)
+ly = lens (fromIntegral . (^?!ioreg.ix 0x44)) (\mem v -> mem&ioreg.ix 0x44 .~ fromIntegral (Mod8.unMod v))

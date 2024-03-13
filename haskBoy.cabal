@@ -31,15 +31,16 @@ executable hboy
     -- other-extensions:
     build-depends:    base      ^>=4.17.1.0
                     , haskBoy
-                    , mtl       ^>=2.3.1
-                    , hspec     ^>=2.11.4
+                    , mtl       ^>=2.2.2
+                    , hspec     ^>=2.10.10
                     , QuickCheck^>=2.14.2
-                    , bytestring^>=0.11.4.0
+                    , bytestring^>=0.11.5.3
                     , vector    ^>=0.13.0.0
                     , sdl2      ^>=2.5.5.0
                     , lens      ^>=5.2.2
                     , deepseq   ^>=1.4.8.0
                     , containers^>=0.6.7
+    extra-libraries: SDL2 SDL2_mixer
     ghc-options: -Wall -O2 -fspecialize-aggressively -fexpose-all-unfoldings -rtsopts
     hs-source-dirs: app
     default-language: Haskell2010
@@ -50,15 +51,16 @@ library
         HaskBoy.Cpu HaskBoy.Cpu.Execution
         HaskBoy.Cpu.Instructions
         HaskBoy.Mmu
-        HaskBoy.Ppu HaskBoy.Ppu.Execution
+        HaskBoy.Ppu HaskBoy.Ppu.Execution HaskBoy.Ppu.LcdControl
         HaskBoy.BitOps
 
     build-depends:    base      ^>=4.17.1.0
-                    , mtl       ^>=2.3.1
+                    , mtl       ^>=2.2.2
                     , vector    ^>=0.13.0.0
                     , containers^>=0.6.7
                     , lens      ^>=5.2.2
                     , QuickCheck^>=2.14.2
+                    , mod       ^>=0.2.0.1
 
     ghc-options: -Wall
     hs-source-dirs: src
@@ -70,12 +72,12 @@ test-suite hboy-test
 
     build-depends:    base      ^>=4.17.1.0
                     , haskBoy
-                    , mtl       ^>=2.3.1
-                    , hspec     ^>=2.11.4
+                    , mtl       ^>=2.2.2
+                    , hspec     ^>=2.10.10
                     , QuickCheck^>=2.14.2
                     , vector    ^>=0.13.0.0
                     , lens      ^>=5.2.2
                     , containers^>=0.6.7
 
-    hs-source-dirs: test, app
+    hs-source-dirs: test
     default-language: Haskell2010
