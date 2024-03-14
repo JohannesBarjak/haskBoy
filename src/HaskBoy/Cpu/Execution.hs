@@ -14,39 +14,39 @@ import Control.Lens
 import Control.Monad.State.Strict
 
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits((.&.), shiftR, complement))
+import Data.Bits (Bits((.&.), shiftR))
 
 import Numeric (showHex)
 
 data Instruction
     = Nop
-    | Xor (Argument Word8)
-    | Or (Argument Word8)
+    | Xor !(Argument Word8)
+    | Or !(Argument Word8)
     | Cpl
-    | And (Argument Word8)
-    | Ld (Argument Word8) (Argument Word8)
-    | Store16 (ALens' Emulator Word16) Word16
-    | Inc (Argument Word8)
-    | Inc16 (ALens' Registers Word16)
-    | Dec (Argument Word8)
-    | Dec16 (ALens' Registers Word16)
-    | Add (Argument Word8)
-    | Add16 (ALens' Registers Word16)
-    | StackStore Word8
-    | Sub (Argument Word8)
-    | Sbc (Argument Word8)
-    | Swap (Argument Word8)
-    | Bit Int (Argument Word8)
-    | Cmp (Argument Word8)
-    | Jmp Word16
-    | JmpC Condition Word16
-    | Jr Bool
-    | Push Word16
-    | Pop (ALens' Registers Word16)
+    | And !(Argument Word8)
+    | Ld !(Argument Word8) !(Argument Word8)
+    | Store16 !(ALens' Emulator Word16) !Word16
+    | Inc !(Argument Word8)
+    | Inc16 !(ALens' Registers Word16)
+    | Dec !(Argument Word8)
+    | Dec16 !(ALens' Registers Word16)
+    | Add !(Argument Word8)
+    | Add16 !(ALens' Registers Word16)
+    | StackStore !Word8
+    | Sub !(Argument Word8)
+    | Sbc !(Argument Word8)
+    | Swap !(Argument Word8)
+    | Bit !Int !(Argument Word8)
+    | Cmp !(Argument Word8)
+    | Jmp !Word16
+    | JmpC !Condition !Word16
+    | Jr !Bool
+    | Push !Word16
+    | Pop !(ALens' Registers Word16)
     | PopAF
-    | Call Word16
-    | Rst Word16
-    | Ret (Maybe Condition)
+    | Call !Word16
+    | Rst !Word16
+    | Ret !(Maybe Condition)
     | EnableInterrupt
     | DisableInterrupt
 
@@ -97,10 +97,7 @@ execute = \case
                 Register r -> Instr.or (cpu.r)
                 Address v -> mcycle 1 *> Instr.or (mmu.v)
 
-        Cpl -> do
-            cpu.register.a %= complement
-            cpu.register.hcarry .= True
-            cpu.register.subOp .= True
+        Cpl -> mcycle 1 *> cpl
 
         And bs -> mcycle 1 *> case bs of
                 Register r -> Instr.and =<< use (cpu.cloneLens r)
@@ -283,9 +280,7 @@ toInstruction = \case
             cpu.tclock += 12
             Store16 (cpu.register.hl) <$> consumeWord
 
-        0x2F -> do
-            cpu.tclock += 4
-            pure Cpl
+        0x2F -> pure Cpl
 
         0x30 -> Jr . not <$> use (cpu.register.carry)
         0x38 -> Jr <$> use (cpu.register.carry)
@@ -406,7 +401,7 @@ toArgument 6 = do
     pure $ Address (addr nn)
 
 toArgument 7 = pure $ Register (register.a)
-toArgument _ = undefined
+toArgument _ = error "Invalid instructionn argument"
 
 extractOctalArg :: (Bits a, Num a) => Int -> a -> a
 extractOctalArg i v = shiftR v i .&. 7

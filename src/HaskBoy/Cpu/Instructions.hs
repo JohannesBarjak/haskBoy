@@ -9,6 +9,7 @@ module HaskBoy.Cpu.Instructions
     , add, sub, sbc
     , add16
     , rl, bit, swap
+    , cpl
     , consumeByte, consumeWord
     , popStack, pushStack
     ) where
@@ -20,7 +21,7 @@ import HaskBoy.Mmu
 import HaskBoy.Cpu
 
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits((.&.), (.|.), shiftL), (.<<.), (.>>.))
+import Data.Bits (Bits((.&.), (.|.), shiftL), (.<<.), (.>>.), complement)
 import Data.Bits qualified as Bits
 
 import Control.Monad.State.Strict
@@ -200,6 +201,12 @@ and n = do
     cpu.register.subOp .= False
 
     cpu.register.a .= result
+
+cpl :: State Emulator ()
+cpl = do
+        cpu.register.a %= complement
+        cpu.register.hcarry .= True
+        cpu.register.subOp .= True
 
 -- Read the current and following byte as a 16-bit word
 -- and then increase the pc register by 2

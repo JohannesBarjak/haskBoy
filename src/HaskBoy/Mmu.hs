@@ -65,7 +65,7 @@ writeWord i v mmu' = writeByte i lb $ writeByte (i + 1) ub mmu'
 
 readByte :: Address -> Mmu -> Word8
 readByte i mem
-    | inRange (0x0000, 0x3FFF) i = mem^?!rom0.ix i
+    | inRange (0x0000, 0x3FFF) i = mem^?!rom0.ix (fromIntegral i)
     | inRange (0x4000, 0x7FFF) i = mem^?!rom1.ix (fromIntegral i - 0x4000)
     | inRange (0x8000, 0x9FFF) i = mem^?!vram.ix (fromIntegral i - 0x8000)
     | inRange (0xA000, 0xBFFF) i = mem^?!eram.ix (fromIntegral i - 0xA000)
