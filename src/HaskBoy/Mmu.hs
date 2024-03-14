@@ -41,21 +41,6 @@ data ObjAttr = ObjAttr
 
 type Address = Word16
 
-data AddrType
-    = Bank0 !Int
-    | Bank1 !Int
-    | VRam !Int
-    | ERam !Int
-    | WRam0 !Int
-    | WRam1 !Int
-    | EWRam0 !Int
-    | EWRam1 !Int
-    | OAM !Int
-    | NoUse !Int
-    | IOReg !Int
-    | HRam !Int
-    | Ie
-
 makeLenses ''Mmu
 makeLenses ''ObjAttr
 
@@ -78,39 +63,21 @@ writeWord i v mmu' = writeByte i lb $ writeByte (i + 1) ub mmu'
     where ub = fromIntegral $ v `shiftR` 8
           lb = fromIntegral $ v .&. 0xFF
 
--- Map an address to the appropriate memory type.
-addrType :: Address -> AddrType
-addrType i
-    | inRange (0x0000, 0x3FFF) i = Bank0  $ fromIntegral i
-    | inRange (0x4000, 0x7FFF) i = Bank1  $ fromIntegral i - 0x4000
-    | inRange (0x8000, 0x9FFF) i = VRam   $ fromIntegral i - 0x8000
-    | inRange (0xA000, 0xBFFF) i = ERam   $ fromIntegral i - 0xA000
-    | inRange (0xC000, 0xCFFF) i = WRam0  $ fromIntegral i - 0xC000
-    | inRange (0xD000, 0xDFFF) i = WRam1  $ fromIntegral i - 0xD000
-    | inRange (0xE000, 0xEFFF) i = EWRam0 $ fromIntegral i - 0xE000
-    | inRange (0xF000, 0xFDFF) i = EWRam1 $ fromIntegral i - 0xF000
-    | inRange (0xFE00, 0xFE9F) i = OAM    $ fromIntegral i - 0xFE00
-    | inRange (0xFEA0, 0xFEFF) i = NoUse  $ fromIntegral i - 0xFEA0
-    | inRange (0xFF00, 0xFF7F) i = IOReg  $ fromIntegral i - 0xFF00
-    | inRange (0xFF80, 0xFFFE) i = HRam   $ fromIntegral i - 0xFF80
-    | otherwise                  = Ie
-
 readByte :: Address -> Mmu -> Word8
-readByte idx mem = do
-    case addrType idx of
-        Bank0  i -> mem^?!rom0.ix i
-        Bank1  i -> mem^?!rom1.ix i
-        VRam   i -> mem^?!vram.ix i
-        ERam   i -> mem^?!eram.ix i
-        WRam0  i -> mem^?!wram0.ix i
-        WRam1  i -> mem^?!wram1.ix i
-        EWRam0 i -> mem^?!wram0.ix i
-        EWRam1 i -> mem^?!wram1.ix i
-        OAM    i -> readOam (mem^.oam) i
-        NoUse  _ -> 0xFF
-        IOReg  i -> mem^?!ioreg.ix i
-        HRam   i -> mem^?!hram.ix i
-        Ie       -> mem^?!ie
+readByte i mem
+    | inRange (0x0000, 0x3FFF) i = mem^?!rom0.ix i
+    | inRange (0x4000, 0x7FFF) i = mem^?!rom1.ix (fromIntegral i - 0x4000)
+    | inRange (0x8000, 0x9FFF) i = mem^?!vram.ix (fromIntegral i - 0x8000)
+    | inRange (0xA000, 0xBFFF) i = mem^?!eram.ix (fromIntegral i - 0xA000)
+    | inRange (0xC000, 0xCFFF) i = mem^?!wram0.ix (fromIntegral i - 0xC000)
+    | inRange (0xD000, 0xDFFF) i = mem^?!wram1.ix (fromIntegral i - 0xD000)
+    | inRange (0xE000, 0xEFFF) i = mem^?!wram0.ix (fromIntegral i - 0xE000)
+    | inRange (0xF000, 0xFDFF) i = mem^?!wram1.ix (fromIntegral i - 0xF000)
+    | inRange (0xFE00, 0xFE9F) i = readOam (mem^.oam) (fromIntegral i - 0xFE00)
+    | inRange (0xFEA0, 0xFEFF) i = 0xFF
+    | inRange (0xFF00, 0xFF7F) i = mem^?!ioreg.ix (fromIntegral i - 0xFF00)
+    | inRange (0xFF80, 0xFFFE) i = mem^?!hram.ix (fromIntegral i - 0xFF80)
+    | otherwise                  = mem^?!ie
 
 readOam :: Seq ObjAttr -> Int -> Word8
 readOam mem av = extractByte oai $ mem^?!ix idx
@@ -133,22 +100,21 @@ writeOam av v mem = case oai of
           oai = av `rem` 4
 
 writeByte :: Address -> Word8 -> Mmu -> Mmu
-writeByte idx v mem = do
-    case addrType idx of
-        Bank0  _ -> mem
-        Bank1  _ -> mem
-        VRam   i -> mem&vram.ix i .~ v
-        ERam   i -> mem&eram.ix i .~ v
-        WRam0  i -> mem&wram0.ix i .~ v
-        WRam1  i -> mem&wram1.ix i .~ v
-        EWRam0 _ -> mem
-        EWRam1 _ -> mem
-        OAM    i -> mem&oam %~ writeOam i v
-        NoUse  _ -> mem
-        IOReg  i -> let rdOnly = [0x44] in
+writeByte i v mem
+    | inRange (0x0000, 0x3FFF) i = mem
+    | inRange (0x4000, 0x7FFF) i = mem
+    | inRange (0x8000, 0x9FFF) i = mem&vram.ix (fromIntegral i - 0x8000) .~ v
+    | inRange (0xA000, 0xBFFF) i = mem&eram.ix (fromIntegral i - 0xA000) .~ v
+    | inRange (0xC000, 0xCFFF) i = mem&wram0.ix (fromIntegral i - 0xC000) .~ v
+    | inRange (0xD000, 0xDFFF) i = mem&wram1.ix (fromIntegral i - 0xD000) .~ v
+    | inRange (0xE000, 0xEFFF) i = mem
+    | inRange (0xF000, 0xFDFF) i = mem
+    | inRange (0xFE00, 0xFE9F) i = mem&oam %~ writeOam (fromIntegral i - 0xFE00) v
+    | inRange (0xFEA0, 0xFEFF) i = mem
+    | inRange (0xFF00, 0xFF7F) i = let rdOnly = [0x44] in
             if i `notElem` rdOnly then 
-                mem&ioreg.ix i .~ v
+                mem&ioreg.ix (fromIntegral i - 0xFF00) .~ v
             else mem
 
-        HRam   i -> mem&hram.ix i .~ v
-        Ie       -> mem&ie .~ v
+    | inRange (0xFF80, 0xFFFE) i = mem&hram.ix (fromIntegral i - 0xFF80) .~ v
+    | otherwise                  = mem&ie .~ v
