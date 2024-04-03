@@ -24,31 +24,61 @@ import Control.Monad.State.Strict
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 
-import Data.Mod.Word qualified as Mod8
-
 import Data.Bits (Bits((.&.), shiftR, (.|.)))
 import Data.Word (Word8)
 import Foreign.Marshal (toBool)
 
+import Data.Bool (bool)
+import Data.Ix (Ix(inRange))
+
 import Control.Applicative (Applicative(liftA2))
+
+-- TODO: Implement scanline wraparound.
 
 drawTiles :: State Emulator ()
 drawTiles = do
-    lineY <- use (mmu.ly)
-    ppu.display.ix (fromIntegral $ Mod8.unMod lineY) <~ zoom mmu bgScanline
+    lineY <- fromIntegral <$> use (mmu.ly)
+    ppu.display.ix lineY <~ zoom mmu bgScanline
+    drawSprites
 
+-- TODO: Implement 40 sprite limit.
 drawSprites :: State Emulator ()
-drawSprites = undefined
+drawSprites = do
+    size <- bool 8 16 <$> use (mmu.objSize)
+    lineY <- use (mmu.ly)
+
+    let visibleX obj = inRange (1, 167) (obj^.xPos)
+    let visibleY obj = inRange ((lineY + 1 - size, lineY)&both +~ 16) (obj^.yPos)
+
+    -- Only Y visibility affects the maximum of 10
+    -- sprite objects per scanline limit.
+    scanAttrs <- Seq.take 10 . Seq.filter visibleY <$> use (mmu.oam)
+
+    tileAddrMode <- bool 0xFF 0xFE <$> use (mmu.objSize)
+    let getTileAddr v = 0x8000 + (fromIntegral (v .&. tileAddrMode) * 16)
+
+    forM_ scanAttrs $ \obj -> do
+        let rowIndex = size - (obj^.yPos - lineY + size - 16)
+        let tileIndex = getTileAddr (obj^.tlIdx)
+
+        spriteRow <- zoom mmu $ getTileRow' tileIndex rowIndex
+
+        -- TODO: Clean messy code.
+        let writeSprite i v = (if inRange (fromIntegral $ obj^.xPos, fromIntegral (obj^.xPos) + 7) i then
+                Seq.index spriteRow (i - fromIntegral (obj^.xPos)) else v)
+
+        ppu.display.ix (fromIntegral lineY) %=
+            Seq.mapWithIndex writeSprite
 
 bgScanline :: State Mmu (Seq Pixel)
 bgScanline = do
     scrollX <- use scx
-    bgScan <- bgScanlineRow =<< liftA2 (+) (use scy) (fromIntegral . Mod8.unMod <$> use ly)
+    bgScan <- bgScanlineRow =<< liftA2 (+) (use scy) (use ly)
 
     let bgEnd = Seq.drop (fromIntegral scrollX) bgScan
 
     pure $ if Seq.length bgEnd >= 160 then
-            Seq.take 160 bgEnd else undefined
+            Seq.take 160 bgEnd else undefined -- TODO: Wrap around display
 
 bgScanlineRow :: Word8 -> State Mmu (Seq Pixel)
 bgScanlineRow y = fmap join $ traverse (getTileRow rowIndex) =<< tileMaps tileIndex
@@ -66,6 +96,13 @@ getTileRow rowIndex tileIndex = do
             0x8000 + (fromIntegral tileIndex * 16)
         else 0x9000 + (fromIntegral (twoCompl tileIndex) * 16)
 
+    tileRow <$> tileBytes (tileAddress + (fromIntegral rowIndex * 2))
+
+    where tileBytes :: Address -> State Mmu (Word8, Word8)
+          tileBytes i = liftA2 (,) (use (addr i)) (use (addr $ i + 1))
+
+getTileRow' :: Address -> Word8 -> State Mmu (Seq Pixel)
+getTileRow' tileAddress rowIndex = do
     tileRow <$> tileBytes (tileAddress + (fromIntegral rowIndex * 2))
 
     where tileBytes :: Address -> State Mmu (Word8, Word8)
@@ -103,5 +140,5 @@ scy = lens (^?!ioreg.ix 0x42) (\mem v -> mem&ioreg.ix 0x42 .~ v)
 lyc :: Lens' Mmu Word8
 lyc = lens (^?!ioreg.ix 0x45) (\mem v -> mem&ioreg.ix 0x45 .~ v)
 
-ly :: Lens' Mmu (Mod8.Mod 154)
-ly = lens (fromIntegral . (^?!ioreg.ix 0x44)) (\mem v -> mem&ioreg.ix 0x44 .~ fromIntegral (Mod8.unMod v))
+ly :: Lens' Mmu Word8
+ly = lens (^?!ioreg.ix 0x44) (\mem v -> mem&ioreg.ix 0x44 .~ v)
