@@ -32,7 +32,7 @@ executable hboy
     build-depends:    base      ^>=4.17.1.0
                     , haskBoy
                     , mtl       ^>=2.2.2
-                    , hspec     ^>=2.10.10
+                    , hspec     ^>=2.11.7
                     , QuickCheck^>=2.14.2
                     , bytestring^>=0.11.5.3
                     , vector    ^>=0.13.0.0
@@ -40,6 +40,7 @@ executable hboy
                     , lens      ^>=5.2.2
                     , deepseq   ^>=1.4.8.0
                     , containers^>=0.6.7
+
     extra-libraries: SDL2 SDL2_mixer
     ghc-options: -Wall -O2 -fspecialize-aggressively -fexpose-all-unfoldings -rtsopts
     hs-source-dirs: app
@@ -73,7 +74,7 @@ test-suite hboy-test
     build-depends:    base      ^>=4.17.1.0
                     , haskBoy
                     , mtl       ^>=2.2.2
-                    , hspec     ^>=2.10.10
+                    , hspec     ^>=2.11.7
                     , QuickCheck^>=2.14.2
                     , vector    ^>=0.13.0.0
                     , lens      ^>=5.2.2

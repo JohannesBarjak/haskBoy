@@ -12,7 +12,7 @@
     haskPkgs = pkgs.haskell.packages.ghc948;
 
   in {
-    packages.${system}.${pkgName} = haskPkgs.callCabal2nix pkgName ./. {};
+    packages.${system}.${pkgName} = haskPkgs.developPackage { root  = ./.; };
     defaultPackage.${system} = self.packages.${system}.${pkgName};
 
     devShells = {
@@ -25,9 +25,8 @@
           ]))
 
           pkgs.pkg-config
+          pkgs.SDL2 pkgs.SDL2_mixer
         ];
-
-        inputsFrom = builtins.attrValues self.packages.${system};
       };
     };
   };
