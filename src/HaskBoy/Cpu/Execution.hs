@@ -76,7 +76,7 @@ execute = \case
                             mcycle 1
                             mmu.cloneLens v <~ use (mmu.cloneLens av)
 
-        Store16 r v -> cloneLens r .= v
+        Store16 r v -> mcycle 3 >> cloneLens r .= v
 
         StackStore v -> do
             mcycle 3
@@ -162,6 +162,7 @@ execute = \case
             cpu.register . cloneLens r <~ popStack
 
         PopAF -> do
+            mcycle 3
             v <- use (cpu.register.flag)
             cpu.register.af <~ popStack
             cpu.register.flag .= v
@@ -180,8 +181,8 @@ execute = \case
 
                 Nothing -> mcycle 2 *> ret
 
-        EnableInterrupt -> cpu.interruptEnable .= True
-        DisableInterrupt -> cpu.interruptEnable .= False
+        EnableInterrupt -> mcycle 1 >> cpu.interruptEnable .= True
+        DisableInterrupt -> mcycle 1 >> cpu.interruptEnable .= False
 
 mcycle :: Integer -> State Emulator ()
 mcycle v = cpu.tclock += (v * 4)
@@ -196,9 +197,7 @@ toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
         0x00 -> pure Nop
 
-        0x01 -> do
-            cpu.tclock += 12
-            Store16 (cpu.register.bc) <$> consumeWord
+        0x01 -> Store16 (cpu.register.bc) <$> consumeWord
 
         0x02 -> do
             nn <- use (cpu.register.bc)
@@ -213,13 +212,16 @@ toInstruction = \case
             Ld <$> toArgument (extractOctalArg 3 i)
                <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
 
+        0x09 -> pure $ Add16 bc
         0x0B -> pure (Dec16 bc)
         0x13 -> pure (Inc16 de)
         0x19 -> pure $ Add16 de
         0x1B -> pure (Dec16 de)
         0x2B -> pure (Dec16 hl)
         0x23 -> pure (Inc16 hl)
+        0x29 -> pure $ Add16 hl
         0x33 -> pure (Inc16 sp)
+        0x39 -> pure $ Add16 sp
         0x3B -> pure (Dec16 sp)
 
         i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.b) <$> toArgument (extractOctalArg 0 i)
@@ -247,9 +249,7 @@ toInstruction = \case
             nn <- cpu.register.hl <<+= 1
             pure $ Ld (Address $ addr nn) (Register $ register.a)
 
-        0x31 -> do
-            cpu.tclock += 12
-            Store16 (cpu.register.sp) <$> consumeWord
+        0x31 -> Store16 (cpu.register.sp) <$> consumeWord
 
         0x32 -> do
             nn <- cpu.register.hl <<-= 1
@@ -272,13 +272,8 @@ toInstruction = \case
         0x20 -> Jr . not <$> use (cpu.register.zero)
         0x28 -> Jr <$> use (cpu.register.zero)
 
-        0x11 -> do
-            cpu.tclock += 12
-            Store16 (cpu.register.de) <$> consumeWord
-
-        0x21 -> do
-            cpu.tclock += 12
-            Store16 (cpu.register.hl) <$> consumeWord
+        0x11 -> Store16 (cpu.register.de) <$> consumeWord
+        0x21 -> Store16 (cpu.register.hl) <$> consumeWord
 
         0x2F -> pure Cpl
 
@@ -363,14 +358,8 @@ toInstruction = \case
             v <- fromIntegral <$> consumeByte
             pure $ Ld (Register $ register.a) (Address $ addr (0xFF00 + v))
 
-        0xF1 -> do
-            cpu.tclock += 12
-            pure PopAF
-
-        0xF3 -> do
-            cpu.tclock += 4
-            pure DisableInterrupt
-
+        0xF1 -> pure PopAF
+        0xF3 -> pure DisableInterrupt
         0xF5 -> Push <$> use (cpu.register.af)
         0xF6 -> Or . Address . addr <$> (cpu.register.pc <<+= 1)
         0xF8 -> StackStore <$> consumeByte
@@ -379,10 +368,7 @@ toInstruction = \case
             mcycle 2
             Ld (Register $ register.a) . Address . addr <$> consumeWord
 
-        0xFB -> do
-            cpu.tclock += 4
-            pure EnableInterrupt
-
+        0xFB -> pure EnableInterrupt
         0xFE -> Cmp . Address . addr <$> (cpu.register.pc <<+= 1)
         0xFF -> pure $ Rst 0x38
 
