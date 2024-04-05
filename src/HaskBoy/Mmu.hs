@@ -75,6 +75,7 @@ readByte i mem
     | inRange (0xF000, 0xFDFF) i = mem^?!wram1.ix (fromIntegral i - 0xF000)
     | inRange (0xFE00, 0xFE9F) i = readOam (mem^.oam) (fromIntegral i - 0xFE00)
     | inRange (0xFEA0, 0xFEFF) i = 0xFF
+    | i == 0xFF00 = 0xCF
     | inRange (0xFF00, 0xFF7F) i = mem^?!ioreg.ix (fromIntegral i - 0xFF00)
     | inRange (0xFF80, 0xFFFE) i = mem^?!hram.ix (fromIntegral i - 0xFF80)
     | otherwise                  = mem^?!ie
