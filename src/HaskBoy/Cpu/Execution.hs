@@ -15,6 +15,7 @@ import Control.Monad.State.Strict
 
 import Data.Word (Word8, Word16)
 import Data.Bits (Bits((.&.), shiftR))
+import HaskBoy.BitOps qualified as BOps
 
 import Numeric (showHex)
 
@@ -37,6 +38,7 @@ data Instruction
     | Sbc !(Argument Word8)
     | Swap !(Argument Word8)
     | Bit !Int !(Argument Word8)
+    | Set !Int !(Argument Word8)
     | Cmp !(Argument Word8)
     | Jmp !Word16
     | JmpC !Condition !Word16
@@ -62,7 +64,7 @@ execute :: Instruction -> State Emulator ()
 execute = \case
         Nop -> mcycle 1
 
-        Ld lhs rhs -> mcycle 1 *> case lhs of
+        Ld lhs rhs -> mcycle 1 >> case lhs of
                 Register lr -> do
                     case rhs of
                         Register rr -> cpu.cloneLens lr <~ use (cpu.cloneLens rr)
@@ -70,7 +72,7 @@ execute = \case
                             mcycle 1
                             cpu.cloneLens lr <~ use (mmu.cloneLens av)
 
-                Address v -> mcycle 1 *> case rhs of
+                Address v -> mcycle 1 >> case rhs of
                         Register r -> mmu.cloneLens v <~ use (cpu.cloneLens r)
                         Address av -> do
                             mcycle 1
@@ -89,61 +91,65 @@ execute = \case
 
             cpu.register.hl .= p + fromIntegral v
 
-        Xor bs -> mcycle 1 *> case bs of
+        Xor bs -> mcycle 1 >> case bs of
                 Register r -> xor =<< use (cpu.cloneLens r)
-                Address v -> mcycle 1 *> (xor =<< use (mmu.cloneLens v))
+                Address v -> mcycle 1 >> (xor =<< use (mmu.cloneLens v))
 
-        Or bs -> mcycle 1 *> case bs of
+        Or bs -> mcycle 1 >> case bs of
                 Register r -> Instr.or (cpu.r)
-                Address v -> mcycle 1 *> Instr.or (mmu.v)
+                Address v -> mcycle 1 >> Instr.or (mmu.v)
 
-        Cpl -> mcycle 1 *> cpl
+        Cpl -> mcycle 1 >> cpl
 
-        And bs -> mcycle 1 *> case bs of
+        And bs -> mcycle 1 >> case bs of
                 Register r -> Instr.and =<< use (cpu.cloneLens r)
-                Address v -> mcycle 1 *> (Instr.and =<< use (mmu.cloneLens v))
+                Address v -> mcycle 1 >> (Instr.and =<< use (mmu.cloneLens v))
 
-        Inc bs -> mcycle 1 *> case bs of
+        Inc bs -> mcycle 1 >> case bs of
                 Register r -> inc (cpu.r)
-                Address av -> mcycle 2 *> inc (mmu.av)
+                Address av -> mcycle 2 >> inc (mmu.av)
 
-        Dec bs -> mcycle 1 *> case bs of
+        Dec bs -> mcycle 1 >> case bs of
                 Register r -> dec (cpu.r)
-                Address av -> mcycle 2 *> dec (mmu.av)
+                Address av -> mcycle 2 >> dec (mmu.av)
 
         Dec16 r -> do
             mcycle 2
             cpu.register.cloneLens r -= 1
 
-        Add bs -> mcycle 1 *> case bs of
+        Add bs -> mcycle 1 >> case bs of
                 Register r -> add =<< use (cpu.cloneLens r)
-                Address av -> mcycle 1 *> (add =<< use (mmu.cloneLens av))
+                Address av -> mcycle 1 >> (add =<< use (mmu.cloneLens av))
 
-        Add16 v -> mcycle 2 *> add16 (cpu.register.v)
+        Add16 v -> mcycle 2 >> add16 (cpu.register.v)
 
-        Sub bs -> mcycle 1 *> case bs of
+        Sub bs -> mcycle 1 >> case bs of
             Register r -> sub (cpu.r)
-            Address av -> mcycle 1 *> sub (mmu. av)
+            Address av -> mcycle 1 >> sub (mmu. av)
 
-        Sbc v -> mcycle 1 *> case v of
+        Sbc v -> mcycle 1 >> case v of
             Register r -> sbc =<< use (cpu.cloneLens r)
-            Address av -> mcycle 1 *> (sbc =<< use (mmu.cloneLens av))
+            Address av -> mcycle 1 >> (sbc =<< use (mmu.cloneLens av))
 
-        Swap bs -> mcycle 2 *> case bs of
+        Swap bs -> mcycle 2 >> case bs of
             Register r -> swap (cpu.r)
-            Address av -> mcycle 2 *> swap (mmu.av)
+            Address av -> mcycle 2 >> swap (mmu.av)
 
-        Bit n bs -> mcycle 2 *> case bs of
+        Bit n bs -> mcycle 2 >> case bs of
             Register r -> bit n (cpu.r)
-            Address av -> mcycle 1 *> bit n (mmu.av)
+            Address av -> mcycle 1 >> bit n (mmu.av)
+
+        Set n bs -> mcycle 2 >> case bs of
+            Register r -> cpu.cloneLens r.BOps.bit n .= True
+            Address av -> mcycle 2 >> mmu.cloneLens av.BOps.bit n .= True
 
         Inc16 r -> do
             mcycle 2
             cpu.register.cloneLens r += 1
 
-        Cmp bs -> mcycle 1 *> case bs of
+        Cmp bs -> mcycle 1 >> case bs of
             Register r -> cmp (cpu.r)
-            Address av -> mcycle 1 *> cmp (mmu.av)
+            Address av -> mcycle 1 >> cmp (mmu.av)
 
         Jr v -> jr v
         Jmp v -> cpu.register.pc .= v
@@ -151,7 +157,7 @@ execute = \case
         JmpC k w -> do
             mcycle 3
             zoom cpu (condition k) >>=
-                flip when (mcycle 1 *> jmp w)
+                flip when (mcycle 1 >> jmp w)
 
         Push v -> do
             mcycle 4
@@ -174,12 +180,12 @@ execute = \case
             pushStack v
             jmp v
 
-        Ret mk -> mcycle 2 *> case mk of
+        Ret mk -> mcycle 2 >> case mk of
                 Just k -> do
                     mcycle 3
                     zoom cpu (condition k) >>= flip when ret
 
-                Nothing -> mcycle 2 *> ret
+                Nothing -> mcycle 2 >> ret
 
         EnableInterrupt -> mcycle 1 >> cpu.interruptEnable .= True
         DisableInterrupt -> mcycle 1 >> cpu.interruptEnable .= False
@@ -311,6 +317,15 @@ toInstruction = \case
             i | i .&. 0xF8 == 0x30 -> Swap <$> toArgument (extractOctalArg 0 i)
             i | i .&. 0xF8 == 0x48 -> Bit 1 <$> toArgument (extractOctalArg 0 i)
             i | i .&. 0xF8 == 0x78 -> Bit 7 <$> toArgument (extractOctalArg 0 i)
+
+            i | i .&. 0xF8 == 0xC0 -> Set 0 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0xC8 -> Set 1 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0xD0 -> Set 2 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0xD8 -> Set 3 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0xE0 -> Set 4 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0xE8 -> Set 5 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0xF0 -> Set 6 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0xF8 -> Set 7 <$> toArgument (extractOctalArg 0 i)
 
             arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
