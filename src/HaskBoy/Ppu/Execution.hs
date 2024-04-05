@@ -4,7 +4,7 @@
 module HaskBoy.Ppu.Execution
     ( drawTiles
     , bgScanline
-    , tileMaps
+    , bgTileMaps
     , getTileRow, tileRow
     , scx, scy
     , ly, lyc
@@ -60,7 +60,7 @@ drawSprites = do
         let rowIndex = size - (obj^.yPos - lineY + size - 16)
         let tileIndex = getTileAddr (obj^.tlIdx)
 
-        spriteRow <- zoom mmu $ getTileRow' tileIndex rowIndex
+        spriteRow <- zoom mmu $ getTileRow tileIndex rowIndex
 
         -- TODO: Clean messy code.
         let writeSprite i v = (if inRange (fromIntegral $ obj^.xPos, fromIntegral (obj^.xPos) + 7) i then
@@ -71,37 +71,32 @@ drawSprites = do
 
 bgScanline :: State Mmu (Seq Pixel)
 bgScanline = do
-    scrollX <- use scx
-    bgScan <- bgScanlineRow =<< liftA2 (+) (use scy) (use ly)
+    y <- liftA2 (+) (use ly) (use scy)
+    let (tileIndex, rowIndex) = (y `quotRem` 8)&both %~ fromIntegral
 
+    bgtd <- use bgTileData
+    let tileAddress tI = if bgtd then
+            0x8000 + (fromIntegral tI * 16)
+        else 0x9000 + (fromIntegral (twoCompl tI) * 16)
+
+    bgScan <- fmap join $
+        traverse ((`getTileRow` rowIndex) . tileAddress)
+        =<< bgTileMaps tileIndex
+
+    scrollX <- use scx
     let bgEnd = Seq.drop (fromIntegral scrollX) bgScan
 
     pure $ if Seq.length bgEnd >= 160 then
             Seq.take 160 bgEnd else undefined -- TODO: Wrap around display
 
-bgScanlineRow :: Word8 -> State Mmu (Seq Pixel)
-bgScanlineRow y = fmap join $ traverse (getTileRow rowIndex) =<< tileMaps tileIndex
-    where (tileIndex, rowIndex) = (y `quotRem` 8)&both %~ fromIntegral
-
-tileMaps :: Integer -> State Mmu (Seq Word8)
-tileMaps tileIndex = sequence $ do
-    i <- fromIntegral <$> Seq.fromList [tileIndex * 32..(tileIndex * 32) + 32]
+bgTileMaps :: Word8 -> State Mmu (Seq Word8)
+bgTileMaps tI = sequence $ do
+    i <- Seq.fromList [tileIndex * 32..(tileIndex * 32) + 32]
     pure $ use (addr (0x9800 + i))
+    where tileIndex = fromIntegral tI
 
-getTileRow :: Integer -> Word8 -> State Mmu (Seq Pixel)
-getTileRow rowIndex tileIndex = do
-    bgtd <- use bgTileData
-    let tileAddress = if bgtd then
-            0x8000 + (fromIntegral tileIndex * 16)
-        else 0x9000 + (fromIntegral (twoCompl tileIndex) * 16)
-
-    tileRow <$> tileBytes (tileAddress + (fromIntegral rowIndex * 2))
-
-    where tileBytes :: Address -> State Mmu (Word8, Word8)
-          tileBytes i = liftA2 (,) (use (addr i)) (use (addr $ i + 1))
-
-getTileRow' :: Address -> Word8 -> State Mmu (Seq Pixel)
-getTileRow' tileAddress rowIndex = do
+getTileRow :: Address -> Word8 -> State Mmu (Seq Pixel)
+getTileRow tileAddress rowIndex = do
     tileRow <$> tileBytes (tileAddress + (fromIntegral rowIndex * 2))
 
     where tileBytes :: Address -> State Mmu (Word8, Word8)
