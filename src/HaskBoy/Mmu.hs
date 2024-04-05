@@ -95,7 +95,7 @@ writeOam av v mem = case oai of
         0 -> mem&ix idx.yPos .~ v
         1 -> mem&ix idx.xPos .~ v
         2 -> mem&ix idx.tlIdx .~ v
-        _ -> undefined
+        _ -> mem -- undefined TODO: Oh NO!
 
     where idx = fromIntegral $ av `rem` 40
           oai = av `rem` 4
