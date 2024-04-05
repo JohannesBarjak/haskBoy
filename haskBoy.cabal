@@ -52,7 +52,7 @@ library
         HaskBoy.Cpu HaskBoy.Cpu.Execution
         HaskBoy.Cpu.Instructions
         HaskBoy.Mmu
-        HaskBoy.Ppu HaskBoy.Ppu.Execution HaskBoy.Ppu.LcdControl
+        HaskBoy.Ppu HaskBoy.Ppu.Execution
         HaskBoy.BitOps
 
     build-depends:    base      ^>=4.17.1.0

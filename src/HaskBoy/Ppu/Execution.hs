@@ -15,7 +15,7 @@ import HaskBoy.Emulator
 
 import HaskBoy.Mmu
 import HaskBoy.Ppu
-import HaskBoy.Ppu.LcdControl
+import HaskBoy.BitOps
 
 import Control.Lens
 import Control.Monad.State.Strict
@@ -141,3 +141,15 @@ lyc = lens (^?!ioreg.ix 0x45) (\mem v -> mem&ioreg.ix 0x45 .~ v)
 
 ly :: Lens' Mmu Word8
 ly = lens (^?!ioreg.ix 0x44) (\mem v -> mem&ioreg.ix 0x44 .~ v)
+
+objEnable, objSize, bgTileData, winEnable, lcdEnable :: Lens' Mmu Bool
+
+objEnable = lens (^.lcdc.bit 1) (\mem v -> mem&lcdc.bit 1 .~ v)
+objSize = lens (^.lcdc.bit 2) (\mem v -> mem&lcdc.bit 2 .~ v)
+
+bgTileData = lens (^.lcdc.bit 4) (\mem v -> mem&lcdc.bit 4 .~ v)
+winEnable = lens (^.lcdc.bit 5) (\mem v -> mem&lcdc.bit 5 .~ v)
+lcdEnable = lens (^.lcdc.bit 7) (\mem v -> mem&lcdc.bit 7 .~ v)
+
+lcdc :: Lens' Mmu Word8
+lcdc = lens (^?!ioreg.ix 0x40) (\mem v -> mem&ioreg.ix 0x40 .~ v)
