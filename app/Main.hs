@@ -31,8 +31,6 @@ import Data.Sequence as Seq
 import Foreign (castPtr, Storable (pokeElemOff), Ptr)
 import Data.Bits
 
-import Control.Monad (when, forM_, join)
-
 hzps, fps, hzpf :: Integer
 hzps = 4194304
 fps  = 60
