@@ -1,6 +1,5 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE DataKinds        #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module HaskBoy.Ppu.Execution
     ( drawTiles

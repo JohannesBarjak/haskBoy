@@ -10,11 +10,14 @@ module HaskBoy.Mmu
     , addr, addr16
     , ObjAttr(..)
     , yPos, xPos, tlIdx
+    , toMemory
     ) where
 
 import Control.Lens
 
-import Data.Sequence
+import Data.Sequence qualified as Seq
+import Data.Sequence (Seq)
+
 import Data.Word (Word8, Word16)
 import Data.Bits
 
@@ -50,6 +53,25 @@ data CartridgeHeader = CartridgeHeader
 makeLenses ''Mmu
 makeLenses ''ObjAttr
 makeLenses ''CartridgeHeader
+
+toMemory :: [Word8] -> Maybe Mmu
+toMemory xs = if length xs == 0x8000
+        then do
+            Just $ Mmu
+                { _rom0  = Seq.fromList r0
+                , _rom1  = Seq.fromList r1
+                , _vram  = Seq.replicate 0x2000 0
+                , _eram  = Seq.replicate 0x2000 0
+                , _wram0 = Seq.replicate 0x1000 0
+                , _wram1 = Seq.replicate 0x1000 0
+                , _oam   = Seq.replicate 40 (ObjAttr 0 0 0)
+                , _ioreg = Seq.replicate 0x80 0
+                , _hram  = Seq.replicate 0x7F 0
+                , _ie    = 0
+                }
+
+        else Nothing
+        where (r0,r1) = splitAt 0x4000 xs
 
 -- | Restricted access to the 'Mmu'
 addr :: Address -> Lens' Mmu Word8

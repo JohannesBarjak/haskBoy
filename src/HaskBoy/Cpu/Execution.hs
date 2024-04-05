@@ -1,6 +1,6 @@
-{-# LANGUAGE DataKinds       #-}
-{-# LANGUAGE LambdaCase      #-}
-{-# LANGUAGE GADTs           #-}
+{-# LANGUAGE DataKinds  #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE GADTs      #-}
 
 module HaskBoy.Cpu.Execution (execute, toInstruction) where
 

@@ -1,14 +1,10 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE NamedFieldPuns  #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module HaskBoy.Emulator where
 
-import HaskBoy.Mmu
-    ( Mmu(..)
-    , ObjAttr(..)
-    )
+import HaskBoy.Mmu (Mmu)
 
 import HaskBoy.Cpu
     ( Cpu(..)
@@ -20,9 +16,7 @@ import HaskBoy.Ppu
     , toPixel
     )
 
-import Data.Word (Word8)
 import Data.Sequence qualified as Seq
-
 import Control.Lens
 
 data Emulator = Emulator
@@ -32,25 +26,6 @@ data Emulator = Emulator
     }
 
 makeLenses ''Emulator
-
-toMemory :: [Word8] -> Maybe Mmu
-toMemory xs = if length xs == 0x8000
-        then do
-            Just $ Mmu
-                { _rom0  = Seq.fromList r0
-                , _rom1  = Seq.fromList r1
-                , _vram  = Seq.replicate 0x2000 0
-                , _eram  = Seq.replicate 0x2000 0
-                , _wram0 = Seq.replicate 0x1000 0
-                , _wram1 = Seq.replicate 0x1000 0
-                , _oam   = Seq.replicate 40 (ObjAttr 0 0 0)
-                , _ioreg = Seq.replicate 0x80 0
-                , _hram  = Seq.replicate 0x7F 0
-                , _ie    = 0
-                }
-
-        else Nothing
-        where (r0,r1) = splitAt 0x4000 xs
 
 initialEmulator :: Mmu -> Emulator
 initialEmulator _mmu = Emulator

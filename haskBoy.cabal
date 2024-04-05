@@ -66,6 +66,7 @@ library
     ghc-options: -Wall
     hs-source-dirs: src
     default-language: Haskell2010
+    default-extensions: ImportQualifiedPost
 
 test-suite hboy-test
     Main-is:          Main.hs
