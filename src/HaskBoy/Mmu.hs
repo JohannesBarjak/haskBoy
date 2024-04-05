@@ -41,8 +41,15 @@ data ObjAttr = ObjAttr
 
 type Address = Word16
 
+data CartridgeHeader = CartridgeHeader
+    { _cartridgeType :: Word8
+    , _romSize :: Word8
+    , _ramSize :: Word8
+    }
+
 makeLenses ''Mmu
 makeLenses ''ObjAttr
+makeLenses ''CartridgeHeader
 
 -- | Restricted access to the 'Mmu'
 addr :: Address -> Lens' Mmu Word8
