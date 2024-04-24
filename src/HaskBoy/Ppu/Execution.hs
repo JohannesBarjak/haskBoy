@@ -47,7 +47,6 @@ drawSprites = do
     size <- bool 8 16 <$> use (mmu.objSize)
     lineY <- use (mmu.ly)
 
-    let visibleX obj = inRange (1, 167) (obj^.xPos)
     let visibleY obj = inRange ((lineY + 1 - size, lineY)&both +~ 16) (obj^.yPos)
 
     -- Only Y visibility affects the maximum of 10
@@ -75,6 +74,7 @@ bgScanline = do
     let (tileIndex, rowIndex) = (y `quotRem` 8)&both %~ fromIntegral
 
     bgtd <- use bgTileData
+
     let tileAddress tI = if bgtd then
             0x8000 + (fromIntegral tI * 16)
         else 0x9000 + (fromIntegral (twoCompl tI) * 16)
@@ -84,15 +84,13 @@ bgScanline = do
         =<< bgTileMaps tileIndex
 
     scrollX <- use scx
-    let bgEnd = Seq.drop (fromIntegral scrollX) bgScan
-
-    pure $ if Seq.length bgEnd >= 160 then
-            Seq.take 160 bgEnd else undefined -- TODO: Wrap around display
+    pure $ Seq.cycleTaking 160 . Seq.drop (fromIntegral scrollX) $ bgScan
 
 bgTileMaps :: Word8 -> State Mmu (Seq Word8)
 bgTileMaps tI = sequence $ do
     i <- Seq.fromList [tileIndex * 32..(tileIndex * 32) + 32]
     pure $ use (addr (0x9800 + i))
+
     where tileIndex = fromIntegral tI
 
 getTileRow :: Address -> Word8 -> State Mmu (Seq Pixel)
