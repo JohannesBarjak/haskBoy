@@ -28,6 +28,7 @@ import Data.Word (Word8)
 import Foreign.Marshal (toBool)
 
 import Data.Bool (bool)
+import Data.Maybe (fromMaybe)
 import Data.Ix (Ix(inRange))
 
 import Control.Applicative (Applicative(liftA2))
@@ -62,9 +63,8 @@ drawSprites = do
 
         spriteRow <- zoom mmu $ getTileRow tileIndex rowIndex
 
-        -- TODO: Clean messy code.
-        let writeSprite i v = (if inRange (fromIntegral $ obj^.xPos, fromIntegral (obj^.xPos) + 7) i then
-                Seq.index spriteRow (i - fromIntegral (obj^.xPos)) else v)
+        let writeSprite i v = fromMaybe v $
+                Seq.lookup (i - fromIntegral (obj^.xPos) + 8) spriteRow
 
         ppu.display.ix (fromIntegral lineY) %=
             Seq.mapWithIndex writeSprite
