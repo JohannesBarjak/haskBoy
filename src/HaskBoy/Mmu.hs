@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE NamedFieldPuns  #-}
 
 module HaskBoy.Mmu
     ( Address
@@ -11,6 +12,7 @@ module HaskBoy.Mmu
     , ObjAttr(..)
     , yPos, xPos, tlIdx
     , toMemory
+    , objPri, yFlip, xFlip, dmgPal
     ) where
 
 import Control.Lens
@@ -19,9 +21,11 @@ import Data.Sequence qualified as Seq
 import Data.Sequence (Seq)
 
 import Data.Word (Word8, Word16)
-import Data.Bits
+import Data.Bits (shiftL, shiftR, (.|.), (.&.))
 
 import Data.Ix (Ix(inRange))
+
+import HaskBoy.BitOps
 
 data Mmu = Mmu
     { _rom0  :: !(Seq Word8)
@@ -37,9 +41,10 @@ data Mmu = Mmu
     }
 
 data ObjAttr = ObjAttr
-    { _yPos  :: !Word8
-    , _xPos  :: !Word8
-    , _tlIdx :: !Word8
+    { _yPos    :: !Word8
+    , _xPos    :: !Word8
+    , _tlIdx   :: !Word8
+    , _objAttr :: !Word8
     }
 
 type Address = Word16
@@ -64,7 +69,7 @@ toMemory xs = if length xs == 0x8000
                 , _eram  = Seq.replicate 0x2000 0
                 , _wram0 = Seq.replicate 0x1000 0
                 , _wram1 = Seq.replicate 0x1000 0
-                , _oam   = Seq.replicate 40 (ObjAttr 0 0 0)
+                , _oam   = Seq.replicate 40 (ObjAttr 0 0 0 0)
                 , _ioreg = Seq.replicate 0x80 0
                 , _hram  = Seq.replicate 0x7F 0
                 , _ie    = 0
@@ -114,17 +119,19 @@ readOam mem av = extractByte oai $ mem^?!ix idx
     where idx = fromIntegral $ av `rem` 40
           oai = av `rem` 4
 
-          extractByte 0 (ObjAttr y _  _) = y
-          extractByte 1 (ObjAttr _ x  _) = x
-          extractByte 2 (ObjAttr _ _ tI) = tI
-          extractByte _ _ = undefined
+          extractByte 0 obj = obj^.yPos
+          extractByte 1 obj = obj^.xPos
+          extractByte 2 obj = obj^.tlIdx
+          extractByte 3 obj = obj^.objAttr
+          extractByte _ _ = error "Invalid argument for readOam"
 
 writeOam :: Int -> Word8 -> Seq ObjAttr -> Seq ObjAttr
 writeOam av v mem = case oai of
         0 -> mem&ix idx.yPos .~ v
         1 -> mem&ix idx.xPos .~ v
         2 -> mem&ix idx.tlIdx .~ v
-        _ -> mem -- undefined TODO: Oh NO!
+        3 -> mem&ix idx.objAttr .~ v
+        _ -> error "Invalid argument for writeOam"
 
     where idx = fromIntegral $ av `rem` 40
           oai = av `rem` 4
@@ -148,3 +155,9 @@ writeByte i v mem
 
     | inRange (0xFF80, 0xFFFE) i = mem&hram.ix (fromIntegral i - 0xFF80) .~ v
     | otherwise                  = mem&ie .~ v
+
+objPri, yFlip, xFlip, dmgPal :: Lens' ObjAttr Bool
+objPri = lens (^.objAttr.bit 7) (\obj v -> obj&objAttr.bit 7 .~ v)
+yFlip  = lens (^.objAttr.bit 6) (\obj v -> obj&objAttr.bit 6 .~ v)
+xFlip  = lens (^.objAttr.bit 5) (\obj v -> obj&objAttr.bit 5 .~ v)
+dmgPal = lens (^.objAttr.bit 4) (\obj v -> obj&objAttr.bit 4 .~ v)
