@@ -1,3 +1,3 @@
 # *WIP gameboy emulator*
 ## Screenshots
-![Hello world](HelloWorld-Demo.png)
+![Hello world](./screenshots/HelloWorld-Demo.png)
