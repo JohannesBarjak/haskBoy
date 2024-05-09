@@ -23,19 +23,19 @@ import Control.Lens
 import Data.Bits (Bits(shiftL, shiftR), (.|.), (.&.))
 
 data Cpu = Cpu
-    { _register        :: Registers
-    , _interruptEnable :: Bool
-    , _tclock          :: Integer -- ^ The Cpu clock uses tcycles
+    { _register        :: !Registers
+    , _interruptEnable :: !Bool
+    , _tclock          :: !Integer -- ^ The Cpu clock uses tcycles
     }
 
 -- | Store 16bit registers
 data Registers = Registers
-    { _af :: Word16
-    , _bc :: Word16
-    , _de :: Word16
-    , _hl :: Word16
-    , _sp :: Word16
-    , _pc :: Word16
+    { _af :: !Word16
+    , _bc :: !Word16
+    , _de :: !Word16
+    , _hl :: !Word16
+    , _sp :: !Word16
+    , _pc :: !Word16
     }
 
 makeLenses ''Cpu
