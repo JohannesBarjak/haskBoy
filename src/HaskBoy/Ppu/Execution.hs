@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedLists  #-}
 
 module HaskBoy.Ppu.Execution
     ( drawTiles
@@ -23,7 +24,7 @@ import Control.Monad.State.Strict
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 
-import Data.Bits (Bits((.&.), shiftR, (.|.)))
+import Data.Bits ((.&.), shiftR, (.|.))
 import Data.Word (Word8)
 import Foreign.Marshal (toBool)
 
@@ -65,8 +66,7 @@ drawSprites = do
         let writeSprite i v = fromMaybe v $
                 Seq.lookup (i - fromIntegral (obj^.xPos) + 8) spriteRow
 
-        ppu.display.ix (fromIntegral lineY) %=
-            Seq.mapWithIndex writeSprite
+        ppu.display.ix (fromIntegral lineY) %= Seq.mapWithIndex writeSprite
 
 bgScanline :: State Mmu (Seq Pixel)
 bgScanline = do
@@ -88,7 +88,7 @@ bgScanline = do
 
 bgTileMaps :: Word8 -> State Mmu (Seq Word8)
 bgTileMaps tI = sequence $ do
-    i <- Seq.fromList [tileIndex * 32..(tileIndex * 32) + 32]
+    i <- [tileIndex * 32..(tileIndex * 32) + 32]
     pure $ use (addr (0x9800 + i))
 
     where tileIndex = fromIntegral tI
@@ -116,7 +116,9 @@ tileRow
 tileRow (v1,v2) = Seq.zipWith toPixel (toBits v1) (toBits v2)
 
     where toBits :: Word8 -> Seq Bool
-          toBits v = Seq.fromList $ [toBool $ (v `shiftR` i) .&. 1 | i <- [7,6..0]]
+          toBits v = do
+            i <- [7,6..0]
+            pure $ toBool $ (v `shiftR` i) .&. 1
 
 ppuMode :: Lens' Mmu Pixel
 ppuMode = lens _ppuMode $ \mem v ->
