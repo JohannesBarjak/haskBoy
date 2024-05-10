@@ -90,9 +90,9 @@ cycleCpu cycles
 
 emulatorLoop :: SDL.Renderer -> Emulator -> Integer -> IO ()
 emulatorLoop renderer emulator cycles = do
-    _ <- SDL.pollEvents
-
     start <- SDL.Raw.getPerformanceCounter
+
+    void . mapM handleEvent =<< SDL.pollEvents
 
     let (rawdp, emulator') = runState (cycleCpu cycles *> rawDisplay) emulator
     renderGbDisplay rawdp renderer
@@ -103,6 +103,11 @@ emulatorLoop renderer emulator cycles = do
     emulatorLoop renderer emulator' (newCycles end start freq)
 
     where newCycles end start freq = round (fromIntegral hzps * (fromIntegral (end - start) / fromIntegral freq) :: Double)
+
+handleEvent :: SDL.Event -> IO ()
+handleEvent event = case SDL.eventPayload event of
+    SDL.WindowClosedEvent _ -> error "Closed window :D"
+    _ -> pure ()
 
 renderGbDisplay :: Seq Word8 -> SDL.Renderer -> IO ()
 renderGbDisplay dp renderer = do
