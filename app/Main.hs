@@ -72,8 +72,8 @@ emulatorLoop renderer emulator cycles = do
 
     void . mapM handleEvent =<< SDL.pollEvents
 
-    let (rawdp, emulator') = runState (cycleCpu cycles *> rawDisplay) emulator
-    renderGbDisplay rawdp renderer
+    let (dp, emulator') = runState (cycleCpu cycles *> rawDisplay) emulator
+    renderGbDisplay dp renderer
 
     end <- SDL.Raw.getPerformanceCounter
     freq <- SDL.Raw.getPerformanceFrequency
