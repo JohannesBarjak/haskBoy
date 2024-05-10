@@ -1,4 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -13,6 +12,7 @@ import System.Environment (getArgs)
 import Data.ByteString qualified as BS
 
 import HaskBoy.Emulator
+import HaskBoy.Emulator.Execution
 
 import HaskBoy.Mmu
 
@@ -65,28 +65,6 @@ loadRom :: FilePath -> IO [Word8]
 loadRom f = do
     rom <- BS.readFile f
     pure $ BS.unpack rom
-
-cycleCpu :: Integer -> State Emulator ()
-cycleCpu cycles
-    = when (cycles > 0) $ do
-        instr <- consumeByte
-        execute =<< toInstruction instr
-
-        instrCost <- use (cpu.tclock)
-        cpu.tclock .= 0
-
-        ppu.clock += instrCost
-
-        ppuTime <- use (ppu.clock)
-
-        when (ppuTime > 455) $ do
-            ppu.clock -= 456
-            mmu.ly += 1
-
-            lineY <- use (mmu.ly)
-            when (lineY < 144) drawTiles
-
-        cycleCpu (cycles - instrCost)
 
 emulatorLoop :: SDL.Renderer -> Emulator -> Integer -> IO ()
 emulatorLoop renderer emulator cycles = do
