@@ -28,7 +28,7 @@ import Control.Lens
 
 import Data.Sequence as Seq
 
-import Foreign (castPtr, Storable (pokeElemOff), Ptr)
+import Foreign (castPtr, Storable (pokeElemOff))
 import Data.Bits
 
 hzps, fps, hzpf :: Integer
@@ -107,9 +107,7 @@ emulatorLoop renderer emulator cycles = do
 renderGbDisplay :: Seq Word8 -> SDL.Renderer -> IO ()
 renderGbDisplay dp renderer = do
     text <- gbTexture renderer
-    (pixelPtr, _) <- SDL.lockTexture text Nothing
-
-    let (pixels :: Ptr Word8) = castPtr pixelPtr
+    pixels <- castPtr . fst <$> SDL.lockTexture text Nothing
 
     forM_ [0..(160 * 144) - 1] $ \i -> do
         forM_ [0..2] $ \j -> do
@@ -122,18 +120,14 @@ renderGbDisplay dp renderer = do
     SDL.present renderer
 
 rawDisplay :: State Emulator (Seq Word8)
-rawDisplay = mapM colorIndexToPixel . join =<< use (ppu.display)
+rawDisplay = mapM pixelToColor . join =<< use (ppu.display)
 
-colorIndexToPixel :: Pixel -> State Emulator Word8
-colorIndexToPixel ci = do
-    palette <- (^?!ioreg.ix 0x47) <$> use mmu
-    let color = fromIntegral (palette `shiftR` (fromEnum ci * 2)) .&. 3
-    pure $ ciToPixel (toEnum color)
-    where ciToPixel White     = 255
-          ciToPixel LightGray = 170
-          ciToPixel DarkGray  = 85
-          ciToPixel Black     = 0
+pixelToColor :: Pixel -> State Emulator Word8
+pixelToColor p = do
+    palette <- use (mmu.addr 0xFF47)
+    pure $ [255, 170, 85, 0] !! color palette
+
+    where color palette = fromIntegral (palette `shiftR` (fromEnum p * 2)) .&. 3
 
 gbTexture :: SDL.Renderer -> IO SDL.Texture
-gbTexture renderer = SDL.createTexture
-    renderer SDL.RGB24 SDL.TextureAccessStreaming (SDL.V2 160 144)
+gbTexture renderer = SDL.createTexture renderer SDL.RGB24 SDL.TextureAccessStreaming (SDL.V2 160 144)
