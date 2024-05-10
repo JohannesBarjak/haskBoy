@@ -1,0 +1,7 @@
+packages: ./haskBoy.cabal
+ignore-project: False
+tests: True
+profiling: True
+
+package haskBoy
+    ghc-options: -ddump-simpl -dsuppress-all -ddump-to-file
