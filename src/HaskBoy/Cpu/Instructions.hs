@@ -1,5 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
-
 module HaskBoy.Cpu.Instructions
     ( inc, dec
     , and, xor, or
@@ -20,7 +18,7 @@ import HaskBoy.Mmu
 import HaskBoy.Cpu
 
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits((.&.), (.|.), shiftL), (.<<.), (.>>.), complement)
+import Data.Bits ((.&.), (.|.), shiftL, (.<<.), (.>>.), complement)
 import Data.Bits qualified as Bits
 
 import Control.Monad.State.Strict

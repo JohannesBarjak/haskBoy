@@ -11,13 +11,7 @@ import HaskBoy.Emulator
 import HaskBoy.Emulator.Execution
 
 import HaskBoy.Mmu
-
-import HaskBoy.Cpu
-import HaskBoy.Cpu.Instructions
-import HaskBoy.Cpu.Execution
-
 import HaskBoy.Ppu
-import HaskBoy.Ppu.Execution
 
 import Control.Lens
 import Control.Monad (forM_, join, void)

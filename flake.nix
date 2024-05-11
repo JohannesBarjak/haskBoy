@@ -1,5 +1,4 @@
-{
-  description = "A flake for a haskell Gameboy emulator";
+{ description = "A flake for a haskell Gameboy emulator";
 
   outputs = { self, nixpkgs ? import <nixpkgs> }: let
     pkgName = "hboy";

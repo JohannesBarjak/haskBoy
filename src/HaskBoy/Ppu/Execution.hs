@@ -1,6 +1,5 @@
-{-# LANGUAGE DataKinds        #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedLists  #-}
+{-# LANGUAGE DataKinds       #-}
+{-# LANGUAGE OverloadedLists #-}
 
 module HaskBoy.Ppu.Execution
     ( drawTiles
@@ -32,8 +31,6 @@ import Foreign.Marshal (toBool)
 import Data.Bool (bool)
 import Data.Maybe (fromMaybe)
 import Data.Ix (inRange)
-
-import Control.Applicative (liftA2)
 
 -- TODO: Implement scanline wraparound.
 

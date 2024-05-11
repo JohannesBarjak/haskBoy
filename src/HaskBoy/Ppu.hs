@@ -16,7 +16,7 @@ import Control.Lens
 
 import Control.Monad.State.Strict (State)
 import Data.Sequence (Seq)
-import Data.Bits (Bits((.&.), shiftR))
+import Data.Bits ((.&.), shiftR)
 
 type Display = Seq (Seq Pixel)
 

@@ -1,5 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
-
 module HaskBoy.BitOps where
 
 import Data.Word

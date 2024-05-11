@@ -1,6 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE RankNTypes      #-}
-{-# LANGUAGE NamedFieldPuns  #-}
 
 module HaskBoy.Mmu
     ( Address
@@ -23,7 +21,7 @@ import Data.Sequence (Seq)
 import Data.Word (Word8, Word16)
 import Data.Bits (shiftL, shiftR, (.|.), (.&.))
 
-import Data.Ix (Ix(inRange))
+import Data.Ix (inRange)
 
 import HaskBoy.BitOps
 

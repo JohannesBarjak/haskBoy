@@ -1,8 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE GADTs           #-}
-{-# LANGUAGE NamedFieldPuns  #-}
-{-# LANGUAGE RankNTypes      #-}
 
 module HaskBoy.Cpu
     ( Registers(..)
@@ -20,7 +18,7 @@ import HaskBoy.BitOps
 
 import Data.Word (Word8, Word16)
 import Control.Lens
-import Data.Bits (Bits(shiftL, shiftR), (.|.), (.&.))
+import Data.Bits (shiftL, shiftR, (.|.), (.&.))
 
 data Cpu = Cpu
     { _register        :: !Registers
