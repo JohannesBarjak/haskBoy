@@ -222,7 +222,7 @@ consumeByte = do
     nn <- use (cpu.register.pc)
     cpu.register.pc += 1
 
-    use (mmu.addr nn)
+    use (mmu.cloneLens (addr nn))
 
 -- Pop 16-bit stack
 popStack :: State Emulator Word16

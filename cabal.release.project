@@ -1,0 +1,8 @@
+packages: ./haskBoy.cabal
+ignore-project: False
+
+optimization: 2
+jobs: $ncpus
+
+package haskBoy
+    --ghc-options: -fspecialize-aggressively -fexpose-all-unfoldings

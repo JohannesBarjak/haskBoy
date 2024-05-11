@@ -19,6 +19,7 @@ import HaskBoy.Ppu
 import HaskBoy.BitOps
 
 import Control.Lens
+import Control.Monad (forM_, join)
 import Control.Monad.State.Strict
 
 import Data.Sequence (Seq)
@@ -30,9 +31,9 @@ import Foreign.Marshal (toBool)
 
 import Data.Bool (bool)
 import Data.Maybe (fromMaybe)
-import Data.Ix (Ix(inRange))
+import Data.Ix (inRange)
 
-import Control.Applicative (Applicative(liftA2))
+import Control.Applicative (liftA2)
 
 -- TODO: Implement scanline wraparound.
 
@@ -89,7 +90,7 @@ bgScanline = do
 bgTileMaps :: Word8 -> State Mmu (Seq Word8)
 bgTileMaps tI = sequence $ do
     i <- [tileIndex * 32..(tileIndex * 32) + 32]
-    pure $ use (addr (0x9800 + i))
+    pure . use $ cloneLens $ addr (0x9800 + i)
 
     where tileIndex = fromIntegral tI
 
@@ -98,7 +99,7 @@ getTileRow tileAddress rowIndex = do
     tileRow <$> tileBytes (tileAddress + (fromIntegral rowIndex * 2))
 
     where tileBytes :: Address -> State Mmu (Word8, Word8)
-          tileBytes i = liftA2 (,) (use (addr i)) (use (addr $ i + 1))
+          tileBytes i = liftA2 (,) (use (cloneLens $ addr i)) (use (cloneLens $ addr $ i + 1))
 
 twoCompl :: Word8 -> Int
 twoCompl r8

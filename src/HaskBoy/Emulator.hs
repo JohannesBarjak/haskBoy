@@ -16,8 +16,8 @@ import HaskBoy.Ppu
     , toPixel
     )
 
-import Data.Sequence qualified as Seq
 import Control.Lens
+import Data.Sequence qualified as Seq
 
 data Emulator = Emulator
     { _mmu :: !Mmu

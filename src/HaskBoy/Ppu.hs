@@ -12,8 +12,6 @@ module HaskBoy.Ppu
 
 import HaskBoy.Mmu (Mmu, ioreg)
 
-import Test.QuickCheck.Arbitrary
-
 import Control.Lens
 
 import Control.Monad.State.Strict (State)
@@ -48,9 +46,6 @@ data PpuMode
     | VRAMRead deriving Enum
 
 makeLenses ''Ppu
-
-instance Arbitrary Pixel where
-    arbitrary = arbitraryBoundedEnum
 
 -- | 'toPixel' converts a pair of booleans into a 'Pixel'
 toPixel

@@ -10,6 +10,7 @@ import HaskBoy.Cpu.Execution
 import HaskBoy.Cpu.Instructions
 
 import Control.Lens
+import Control.Monad (when)
 import Control.Monad.State.Strict
 
 cycleCpu :: Integer -> State Emulator ()

@@ -7,10 +7,6 @@ import SDL qualified
 import SDL.Raw qualified
 import SDL (($=))
 
-import Data.Word (Word8)
-import System.Environment (getArgs)
-import Data.ByteString qualified as BS
-
 import HaskBoy.Emulator
 import HaskBoy.Emulator.Execution
 
@@ -23,12 +19,17 @@ import HaskBoy.Cpu.Execution
 import HaskBoy.Ppu
 import HaskBoy.Ppu.Execution
 
-import Control.Monad.State.Strict
 import Control.Lens
+import Control.Monad (forM_, join, void)
+import Control.Monad.State.Strict
 
 import Data.Sequence as Seq
 
-import Foreign (castPtr, Storable (pokeElemOff))
+import Data.Word (Word8)
+import System.Environment (getArgs)
+import Data.ByteString qualified as BS
+
+import Foreign (castPtr, pokeElemOff)
 import Data.Bits
 
 hzps, fps, hzpf :: Integer
@@ -107,7 +108,7 @@ rawDisplay = mapM pixelToColor . join =<< use (ppu.display)
 
 pixelToColor :: Pixel -> State Emulator Word8
 pixelToColor p = do
-    palette <- use (mmu.addr 0xFF47)
+    palette <- use (cloneLens $ mmu.addr 0xFF47)
     pure $ [255, 170, 85, 0] !! color palette
 
     where color palette = fromIntegral (palette `shiftR` (fromEnum p * 2)) .&. 3

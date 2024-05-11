@@ -1,16 +1,11 @@
 {
   description = "A flake for a haskell Gameboy emulator";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  };
-
-  outputs = { self, nixpkgs }: let
-    system = "x86_64-linux";
-    pkgs = nixpkgs.legacyPackages.${system};
+  outputs = { self, nixpkgs ? import <nixpkgs> }: let
     pkgName = "hboy";
-    haskPkgs = pkgs.haskell.packages.ghc948;
-
+    system = "x86_64-linux";
+    pkgs = import nixpkgs { inherit system; };
+    haskPkgs = pkgs.haskell.packages.ghc964;
   in {
     packages.${system}.${pkgName} = haskPkgs.developPackage { root  = ./.; };
     defaultPackage.${system} = self.packages.${system}.${pkgName};

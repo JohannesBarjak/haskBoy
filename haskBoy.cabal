@@ -29,22 +29,19 @@ executable hboy
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
-    build-depends:    base      ^>=4.17.1.0
+    build-depends:    base      ^>=4.18.2.0
                     , haskBoy
-                    , mtl       ^>=2.2.2
-                    , hspec     ^>=2.11.7
-                    , QuickCheck^>=2.14.2
+                    , mtl       ^>=2.3.1
                     , bytestring^>=0.11.5.3
                     , vector    ^>=0.13.0.0
                     , sdl2      ^>=2.5.5.0
                     , lens      ^>=5.2.2
-                    , deepseq   ^>=1.4.8.0
                     , containers^>=0.6.7
 
     extra-libraries: SDL2 SDL2_mixer
-    ghc-options: -Wall -j4 +RTS -A32m -RTS -O2 -fspecialize-aggressively -fexpose-all-unfoldings -rtsopts
+    ghc-options: -Wall
     hs-source-dirs: app
-    default-language: Haskell2010
+    default-language: GHC2021
     default-extensions: ImportQualifiedPost
 
 library
@@ -56,26 +53,25 @@ library
         HaskBoy.Ppu HaskBoy.Ppu.Execution
         HaskBoy.BitOps
 
-    build-depends:    base      ^>=4.17.1.0
-                    , mtl       ^>=2.2.2
+    build-depends:    base      ^>=4.18.2.0
+                    , mtl       ^>=2.3.1
                     , vector    ^>=0.13.0.0
                     , containers^>=0.6.7
                     , lens      ^>=5.2.2
-                    , QuickCheck^>=2.14.2
                     , mod       ^>=0.2.0.1
 
-    ghc-options: -Wall -j4 +RTS -A32m -RTS -O2
+    ghc-options: -Wall
     hs-source-dirs: src
-    default-language: Haskell2010
+    default-language: GHC2021
     default-extensions: ImportQualifiedPost
 
 test-suite hboy-test
     Main-is:          Main.hs
     type:             exitcode-stdio-1.0
 
-    build-depends:    base      ^>=4.17.1.0
+    build-depends:    base      ^>=4.18.2.0
                     , haskBoy
-                    , mtl       ^>=2.2.2
+                    , mtl       ^>=2.3.1
                     , hspec     ^>=2.11.7
                     , QuickCheck^>=2.14.2
                     , vector    ^>=0.13.0.0
@@ -83,4 +79,4 @@ test-suite hboy-test
                     , containers^>=0.6.7
 
     hs-source-dirs: test
-    default-language: Haskell2010
+    default-language: GHC2021

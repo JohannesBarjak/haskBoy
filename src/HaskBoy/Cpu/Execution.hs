@@ -11,6 +11,7 @@ import HaskBoy.Cpu
 import HaskBoy.Cpu.Instructions as Instr
 
 import Control.Lens
+import Control.Monad (when)
 import Control.Monad.State.Strict
 
 import Data.Word (Word8, Word16)

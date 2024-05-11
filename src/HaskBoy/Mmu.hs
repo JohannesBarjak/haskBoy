@@ -79,7 +79,7 @@ toMemory xs = if length xs == 0x8000
         where (r0,r1) = splitAt 0x4000 xs
 
 -- | Restricted access to the 'Mmu'
-addr :: Address -> Lens' Mmu Word8
+addr :: Address -> ALens' Mmu Word8
 addr i = lens (readByte i) (flip $ writeByte i)
 
 -- | Provides restricted access to a Word in the 'Mmu'.
