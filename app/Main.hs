@@ -14,7 +14,7 @@ import HaskBoy.Mmu
 import HaskBoy.Ppu
 
 import Control.Lens
-import Control.Monad (forM_, join, void)
+import Control.Monad (join, void)
 import Control.Monad.State.Strict
 
 import Data.Sequence as Seq
@@ -62,20 +62,19 @@ loadRom f = do
     pure $ BS.unpack rom
 
 emulatorLoop :: SDL.Renderer -> Emulator -> Integer -> IO ()
-emulatorLoop renderer emulator cycles = do
-    start <- SDL.Raw.getPerformanceCounter
+emulatorLoop renderer prevState cycles = do
+    start <- fromIntegral <$> SDL.Raw.getPerformanceCounter
 
     void . mapM handleEvent =<< SDL.pollEvents
 
-    let (dp, emulator') = runState (cycleCpu cycles *> rawDisplay) emulator
+    let (dp, nextState) = runState (cycleCpu cycles >> rawDisplay) prevState
     renderGbDisplay dp renderer
 
-    end <- SDL.Raw.getPerformanceCounter
-    freq <- SDL.Raw.getPerformanceFrequency
+    end <- fromIntegral <$> SDL.Raw.getPerformanceCounter
+    freq <- fromIntegral <$> SDL.Raw.getPerformanceFrequency
 
-    emulatorLoop renderer emulator' (newCycles end start freq)
-
-    where newCycles end start freq = round (fromIntegral hzps * (fromIntegral (end - start) / fromIntegral freq) :: Double)
+    let newCycles = round (fromIntegral hzps * (end - start) / freq :: Double)
+    emulatorLoop renderer nextState newCycles
 
 handleEvent :: SDL.Event -> IO ()
 handleEvent event = case SDL.eventPayload event of
@@ -85,11 +84,9 @@ handleEvent event = case SDL.eventPayload event of
 renderGbDisplay :: Seq Word8 -> SDL.Renderer -> IO ()
 renderGbDisplay dp renderer = do
     text <- gbTexture renderer
-    pixels <- castPtr . fst <$> SDL.lockTexture text Nothing
 
-    forM_ [0..(160 * 144) - 1] $ \i -> do
-        forM_ [0..2] $ \j -> do
-            pokeElemOff pixels ((i * 3) + j) (Seq.index dp i)
+    pixels <- castPtr . fst <$> SDL.lockTexture text Nothing
+    mapM_ (pokeElemOff pixels <*> (Seq.index dp . (`div` 3))) $ init [0..160 * 144 * 3]
 
     SDL.unlockTexture text
 
