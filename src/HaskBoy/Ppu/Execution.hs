@@ -11,26 +11,25 @@ module HaskBoy.Ppu.Execution
     , ppuMode
     ) where
 
-import HaskBoy.Emulator
-
-import HaskBoy.Mmu
-import HaskBoy.Ppu
-import HaskBoy.BitOps
-
 import Control.Lens
 import Control.Monad (forM_, join)
 import Control.Monad.State.Strict
 
+import Data.Bits ((.&.), shiftR, (.|.))
+import Data.Bool (bool)
+import Data.Ix (inRange)
+import Data.Maybe (fromMaybe)
+
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 
-import Data.Bits ((.&.), shiftR, (.|.))
 import Data.Word (Word8)
 import Foreign.Marshal (toBool)
 
-import Data.Bool (bool)
-import Data.Maybe (fromMaybe)
-import Data.Ix (inRange)
+import HaskBoy.BitOps
+import HaskBoy.Emulator
+import HaskBoy.Mmu
+import HaskBoy.Ppu
 
 -- TODO: Implement scanline wraparound.
 
@@ -59,7 +58,7 @@ drawSprites = do
         let rowIndex = size - (obj^.yPos - lineY + size - 16)
         let tileIndex = getTileAddr (obj^.tlIdx)
 
-        spriteRow <- zoom mmu $ getTileRow tileIndex rowIndex
+        spriteRow <- zoom mmu $ getTileRow rowIndex tileIndex
 
         let writeSprite i v = fromMaybe v $
                 Seq.lookup (i - fromIntegral (obj^.xPos) + 8) spriteRow
@@ -71,32 +70,30 @@ bgScanline = do
     y <- liftA2 (+) (use ly) (use scy)
     let (tileIndex, rowIndex) = (y `quotRem` 8)&both %~ fromIntegral
 
-    bgtd <- use bgTileData
-
-    let tileAddress tI = if bgtd then
-            0x8000 + (fromIntegral tI * 16)
-        else 0x9000 + (fromIntegral (twoCompl tI) * 16)
-
-    bgScan <- fmap join $
-        traverse ((`getTileRow` rowIndex) . tileAddress)
-        =<< bgTileMaps tileIndex
+    btd <- use bgTileData
+    bgScan <- bgTileMaps tileIndex >>= traverse (getTileRow rowIndex . tileAddress btd)
 
     scrollX <- use scx
-    pure $ Seq.cycleTaking 160 . Seq.drop (fromIntegral scrollX) $ bgScan
+    pure $ Seq.cycleTaking 160 $ Seq.drop (fromIntegral scrollX) (join bgScan)
+
+    where tileAddress True  idx = 0x8000 + (fromIntegral idx * 16)
+          tileAddress False idx = 0x9000 + (fromIntegral (twoCompl idx) * 16)
 
 bgTileMaps :: Word8 -> State Mmu (Seq Word8)
-bgTileMaps tI = sequence $ do
-    i <- [tileIndex * 32..(tileIndex * 32) + 32]
-    pure . use $ cloneLens $ addr (0x9800 + i)
+bgTileMaps tI = go 32 tileIndex []
+    where tileIndex = 0x9800 + fromIntegral tI * 32
 
-    where tileIndex = fromIntegral tI
+          go :: Int -> Address -> Seq Word8 -> State Mmu (Seq Word8)
+          go 0 idx ts = (ts |>) <$> use (cloneLens $ addr idx)
+          go i idx ts = do
+            !t <- use (cloneLens $ addr idx)
+            go (i - 1) (idx + 1) (ts |> t)
 
-getTileRow :: Address -> Word8 -> State Mmu (Seq Pixel)
-getTileRow tileAddress rowIndex = do
-    tileRow <$> tileBytes (tileAddress + (fromIntegral rowIndex * 2))
-
-    where tileBytes :: Address -> State Mmu (Word8, Word8)
-          tileBytes i = liftA2 (,) (use (cloneLens $ addr i)) (use (cloneLens $ addr $ i + 1))
+getTileRow :: Word8 -> Address -> State Mmu (Seq Pixel)
+getTileRow ri ta
+    = let ra = ta + (fromIntegral ri * 2) in tileRow
+        <$> use (cloneLens $ addr ra)
+        <*> use (cloneLens $ addr (ra + 1))
 
 twoCompl :: Word8 -> Int
 twoCompl r8
@@ -104,14 +101,8 @@ twoCompl r8
     | otherwise = -(256 - fromIntegral r8)
 
 -- | Get a single tile row from a pair of bytes
-tileRow
-    ::
-    ( Word8 -- ^ Lower bits
-    , Word8 -- ^ Upper bits
-    )
-    -> Seq Pixel
-
-tileRow (v1,v2) = Seq.zipWith toPixel (toBits v1) (toBits v2)
+tileRow :: Word8 -> Word8 -> Seq Pixel
+tileRow v1 v2 = Seq.zipWith toPixel (toBits v1) (toBits v2)
 
     where toBits :: Word8 -> Seq Bool
           toBits v = do
