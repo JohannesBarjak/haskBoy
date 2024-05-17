@@ -11,20 +11,19 @@ module HaskBoy.Cpu.Instructions
     , popStack, pushStack
     ) where
 
-import Prelude hiding (and, or)
+import Control.Lens
+import Control.Monad.State.Strict
 
-import HaskBoy.Emulator
-import HaskBoy.Mmu
-import HaskBoy.Cpu
-
-import Data.Word (Word8, Word16)
 import Data.Bits ((.&.), (.|.), shiftL, (.<<.), (.>>.), complement)
 import Data.Bits qualified as Bits
-
-import Control.Monad.State.Strict
-import Control.Lens
-
+import Data.Word (Word8, Word16)
 import Foreign.Marshal.Utils (fromBool, toBool)
+
+import HaskBoy.Cpu
+import HaskBoy.Emulator
+import HaskBoy.Mmu
+
+import Prelude hiding (and, or)
 
 inc :: ALens' Emulator Word8 -> State Emulator ()
 inc r = do

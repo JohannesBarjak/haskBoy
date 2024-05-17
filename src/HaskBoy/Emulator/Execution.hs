@@ -1,17 +1,16 @@
 module HaskBoy.Emulator.Execution (cycleCpu) where
 
-import HaskBoy.Emulator
-
-import HaskBoy.Ppu
-import HaskBoy.Ppu.Execution
+import Control.Lens
+import Control.Monad (when)
+import Control.Monad.State.Strict
 
 import HaskBoy.Cpu
 import HaskBoy.Cpu.Execution
 import HaskBoy.Cpu.Instructions
 
-import Control.Lens
-import Control.Monad (when)
-import Control.Monad.State.Strict
+import HaskBoy.Emulator
+import HaskBoy.Ppu
+import HaskBoy.Ppu.Execution
 
 cycleCpu :: Integer -> State Emulator ()
 cycleCpu cycles

@@ -4,19 +4,18 @@
 
 module HaskBoy.Cpu.Execution (execute, toInstruction) where
 
-import HaskBoy.Emulator
-
-import HaskBoy.Mmu
-import HaskBoy.Cpu
-import HaskBoy.Cpu.Instructions as Instr
-
 import Control.Lens
 import Control.Monad (when)
 import Control.Monad.State.Strict
 
+import Data.Bits (Bits, (.&.), shiftR)
 import Data.Word (Word8, Word16)
-import Data.Bits (Bits((.&.), shiftR))
 import HaskBoy.BitOps qualified as BOps
+
+import HaskBoy.Cpu
+import HaskBoy.Cpu.Instructions as Instr
+import HaskBoy.Emulator
+import HaskBoy.Mmu
 
 import Numeric (showHex)
 

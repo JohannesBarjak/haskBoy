@@ -10,13 +10,12 @@ module HaskBoy.Ppu
     , display, clock
     ) where
 
-import HaskBoy.Mmu (Mmu, ioreg)
-
 import Control.Lens
-
 import Control.Monad.State.Strict (State)
-import Data.Sequence (Seq)
+
 import Data.Bits ((.&.), shiftR)
+import Data.Sequence (Seq)
+import HaskBoy.Mmu (Mmu, ioreg)
 
 type Display = Seq (Seq Pixel)
 

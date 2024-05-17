@@ -3,28 +3,27 @@
 
 module Main where
 
-import SDL qualified
-import SDL.Raw qualified
-import SDL (($=))
-
-import HaskBoy.Emulator
-import HaskBoy.Emulator.Execution
-
-import HaskBoy.Mmu
-import HaskBoy.Ppu
-
 import Control.Lens
 import Control.Monad (join, void)
 import Control.Monad.State.Strict
 
-import Data.Sequence as Seq
-
-import Data.Word (Word8)
-import System.Environment (getArgs)
+import Data.Bits
 import Data.ByteString qualified as BS
 
+import Data.Sequence as Seq
+import Data.Word (Word8)
 import Foreign (castPtr, pokeElemOff)
-import Data.Bits
+
+import HaskBoy.Emulator
+import HaskBoy.Emulator.Execution
+import HaskBoy.Mmu
+import HaskBoy.Ppu
+
+import SDL (($=))
+import SDL qualified
+import SDL.Raw qualified
+
+import System.Environment (getArgs)
 
 hzps, fps, hzpf :: Integer
 hzps = 4194304
