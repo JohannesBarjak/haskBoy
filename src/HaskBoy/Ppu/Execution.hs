@@ -1,5 +1,6 @@
-{-# LANGUAGE DataKinds       #-}
-{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE MonadComprehensions #-}
+{-# LANGUAGE OverloadedLists     #-}
 
 module HaskBoy.Ppu.Execution
     ( drawTiles
@@ -17,11 +18,12 @@ import Control.Monad.State.Strict
 
 import Data.Bits ((.&.), shiftR, (.|.))
 import Data.Bool (bool)
+import Data.Function (on)
 import Data.Ix (inRange)
 import Data.Maybe (fromMaybe)
 
 import Data.Sequence (Seq)
-import Data.Sequence qualified as Seq
+import Data.Sequence qualified as S
 
 import Data.Word (Word8)
 import Foreign.Marshal (toBool)
@@ -45,11 +47,9 @@ drawSprites = do
     size <- bool 8 16 <$> use (mmu.objSize)
     lineY <- use (mmu.ly)
 
+    -- Only Y visibility affects the maximum of 10 sprite objects per scanline limit.
     let visibleY obj = inRange ((lineY + 1 - size, lineY)&both +~ 16) (obj^.yPos)
-
-    -- Only Y visibility affects the maximum of 10
-    -- sprite objects per scanline limit.
-    scanAttrs <- Seq.take 10 . Seq.filter visibleY <$> use (mmu.oam)
+    scanAttrs <- S.take 10 . S.filter visibleY <$> use (mmu.oam)
 
     tileAddrMode <- bool 0xFF 0xFE <$> use (mmu.objSize)
     let getTileAddr v = 0x8000 + (fromIntegral (v .&. tileAddrMode) * 16)
@@ -61,9 +61,9 @@ drawSprites = do
         spriteRow <- zoom mmu $ getTileRow rowIndex tileIndex
 
         let writeSprite i v = fromMaybe v $
-                Seq.lookup (i - fromIntegral (obj^.xPos) + 8) spriteRow
+                S.lookup (i - fromIntegral (obj^.xPos) + 8) spriteRow
 
-        ppu.display.ix (fromIntegral lineY) %= Seq.mapWithIndex writeSprite
+        ppu.display.ix (fromIntegral lineY) %= S.mapWithIndex writeSprite
 
 bgScanline :: State Mmu (Seq Pixel)
 bgScanline = do
@@ -74,7 +74,9 @@ bgScanline = do
     bgScan <- bgTileMaps tileIndex >>= traverse (getTileRow rowIndex . tileAddress btd)
 
     scrollX <- use scx
-    pure $ Seq.cycleTaking 160 $ Seq.drop (fromIntegral scrollX) (join bgScan)
+    pure $ join bgScan
+        & S.drop (fromIntegral scrollX)
+        & S.cycleTaking 160
 
     where tileAddress True  idx = 0x8000 + (fromIntegral idx * 16)
           tileAddress False idx = 0x9000 + (fromIntegral (twoCompl idx) * 16)
@@ -102,12 +104,7 @@ twoCompl r8
 
 -- | Get a single tile row from a pair of bytes
 tileRow :: Word8 -> Word8 -> Seq Pixel
-tileRow v1 v2 = Seq.zipWith toPixel (toBits v1) (toBits v2)
-
-    where toBits :: Word8 -> Seq Bool
-          toBits v = do
-            i <- [7,6..0]
-            pure $ toBool $ (v `shiftR` i) .&. 1
+tileRow v1 v2 = [on toPixel (toBool . (.&. 1) . (`shiftR` i)) v1 v2 | i <- [7,6..0]]
 
 ppuMode :: Lens' Mmu Pixel
 ppuMode = lens _ppuMode $ \mem v ->
