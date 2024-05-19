@@ -9,4 +9,4 @@ optimization: 1
 jobs: $ncpus
 
 package haskBoy
-    ghc-options: -ddump-simpl -dsuppress-all -ddump-to-file
+    ghc-options: -rtsopts -ddump-simpl -dsuppress-all -ddump-to-file
