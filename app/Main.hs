@@ -56,23 +56,18 @@ main = do
     SDL.destroyWindow window
 
 loadRom :: FilePath -> IO [Word8]
-loadRom f = do
-    rom <- BS.readFile f
-    pure $ BS.unpack rom
+loadRom f = BS.unpack <$> BS.readFile f
 
 emulatorLoop :: SDL.Renderer -> Emulator -> Integer -> IO ()
 emulatorLoop renderer prevState cycles = do
-    start <- fromIntegral <$> SDL.Raw.getPerformanceCounter
-
+    start <- SDL.time
     void . mapM handleEvent =<< SDL.pollEvents
 
     let (dp, nextState) = runState (cycleCpu cycles >> rawDisplay) prevState
     renderGbDisplay dp renderer
+    end <- SDL.time
 
-    end <- fromIntegral <$> SDL.Raw.getPerformanceCounter
-    freq <- fromIntegral <$> SDL.Raw.getPerformanceFrequency
-
-    let newCycles = round (fromIntegral hzps * (end - start) / freq :: Double)
+    let newCycles = round (fromIntegral hzps * (end - start) :: Double)
     emulatorLoop renderer nextState newCycles
 
 handleEvent :: SDL.Event -> IO ()
