@@ -5,7 +5,6 @@
 module HaskBoy.Ppu.Execution
     ( drawTiles
     , bgScanline
-    , bgTileMaps
     , getTileRow, tileRow
     , scx, scy
     , ly, lyc
@@ -13,7 +12,7 @@ module HaskBoy.Ppu.Execution
     ) where
 
 import Control.Lens
-import Control.Monad (forM_, join)
+import Control.Monad (forM_)
 import Control.Monad.State.Strict
 
 import Data.Bits ((.&.), shiftR, (.|.))
@@ -38,7 +37,7 @@ import HaskBoy.Ppu
 drawTiles :: State Emulator ()
 drawTiles = do
     lineY <- fromIntegral <$> use (mmu.ly)
-    ppu.display.ix lineY <~ zoom mmu bgScanline
+    ppu.display.ix lineY <~ bgScanline <$> use mmu
     drawSprites
 
 -- TODO: Implement 40 sprite limit.
@@ -65,31 +64,23 @@ drawSprites = do
 
         ppu.display.ix (fromIntegral lineY) %= S.mapWithIndex writeSprite
 
-bgScanline :: State Mmu (Seq Pixel)
-bgScanline = do
-    y <- liftA2 (+) (use ly) (use scy)
-    let (tileIndex, rowIndex) = (y `quotRem` 8)&both %~ fromIntegral
+bgScanline :: Mmu -> Seq Pixel
+bgScanline mem
+    = (tileRows . tileAddress =<< bgTileMaps)
+    & S.drop (fromIntegral $ mem^.scx)
+    & S.cycleTaking 160
 
-    btd <- use bgTileData
-    bgScan <- bgTileMaps tileIndex >>= traverse (getTileRow rowIndex . tileAddress btd)
+    where tileRows ta = let ra = ta + (fromIntegral ri * 2) in
+            tileRow (mem^.cloneLens (addr ra)) (mem^.cloneLens (addr $ ra + 1))
 
-    scrollX <- use scx
-    pure $ join bgScan
-        & S.drop (fromIntegral scrollX)
-        & S.cycleTaking 160
+          bgTileMaps = let ta = 0x9800 + fromIntegral ti * 32 in
+            [mem^.cloneLens (addr i) | i <- [ta..ta + 32]]
 
-    where tileAddress True  idx = 0x8000 + (fromIntegral idx * 16)
-          tileAddress False idx = 0x9000 + (fromIntegral (twoCompl idx) * 16)
+          tileAddress idx
+            = if mem^.bgTileData then 0x8000 + (fromIntegral idx * 16)
+            else 0x9000 + (fromIntegral (twoCompl idx) * 16)
 
-bgTileMaps :: Word8 -> State Mmu (Seq Word8)
-bgTileMaps tI = go 32 tileIndex []
-    where tileIndex = 0x9800 + fromIntegral tI * 32
-
-          go :: Int -> Address -> Seq Word8 -> State Mmu (Seq Word8)
-          go 0 idx ts = (ts |>) <$> use (cloneLens $ addr idx)
-          go i idx ts = do
-            !t <- use (cloneLens $ addr idx)
-            go (i - 1) (idx + 1) (ts |> t)
+          (ti, ri) = (mem^.ly + mem^.scy) `quotRem` 8
 
 getTileRow :: Word8 -> Address -> State Mmu (Seq Pixel)
 getTileRow ri ta
