@@ -88,6 +88,8 @@ renderGbDisplay dp renderer = do
     SDL.copy renderer text Nothing Nothing
     SDL.present renderer
 
+    SDL.destroyTexture text
+
 rawDisplay :: State Emulator (Seq Word8)
 rawDisplay = mapM pixelToColor . join =<< use (ppu.display)
 
