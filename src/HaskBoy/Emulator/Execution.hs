@@ -21,15 +21,7 @@ cycleCpu cycles
         instrCost <- use (cpu.tclock)
         cpu.tclock .= 0
 
-        ppu.clock += instrCost
-
-        ppuTime <- use (ppu.clock)
-
-        when (ppuTime > 455) $ do
-            ppu.clock -= 456
-            mmu.ly += 1
-
-            lineY <- use (mmu.ly)
-            when (lineY < 144) drawTiles
+        ppu.clock += instrCost * 2
+        ppuCycle
 
         cycleCpu (cycles - instrCost)

@@ -3,7 +3,8 @@
 {-# LANGUAGE OverloadedLists     #-}
 
 module HaskBoy.Ppu.Execution
-    ( drawTiles
+    ( ppuCycle
+    , drawTiles
     , bgScanline
     , getTileRow, tileRow
     , scx, scy
@@ -12,7 +13,7 @@ module HaskBoy.Ppu.Execution
     ) where
 
 import Control.Lens
-import Control.Monad (forM_)
+import Control.Monad (forM_, when)
 import Control.Monad.State.Strict
 
 import Data.Bits ((.&.), shiftR, (.|.))
@@ -32,7 +33,16 @@ import HaskBoy.Emulator
 import HaskBoy.Mmu
 import HaskBoy.Ppu
 
--- TODO: Implement scanline wraparound.
+ppuCycle :: State Emulator ()
+ppuCycle = do
+        ppuTime <- use (ppu.clock)
+
+        when (ppuTime >= 456) $ do
+            ppu.clock -= 456
+            mmu.ly += 1
+
+            lineY <- use (mmu.ly)
+            when (lineY < 144) drawTiles
 
 drawTiles :: State Emulator ()
 drawTiles = do
