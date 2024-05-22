@@ -15,13 +15,12 @@ import HaskBoy.Ppu.Execution
 cycleCpu :: Integer -> State Emulator ()
 cycleCpu cycles
     = when (cycles > 0) $ do
+        oldTime <- use (cpu.tclock)
         instr <- consumeByte
         execute =<< toInstruction instr
+        newTime <- use (cpu.tclock)
 
-        instrCost <- use (cpu.tclock)
-        cpu.tclock .= 0
-
-        ppu.clock += instrCost * 2
+        ppu.clock .= newTime `quot` 8
         ppuCycle
 
-        cycleCpu (cycles - instrCost)
+        cycleCpu (cycles - (newTime - oldTime))

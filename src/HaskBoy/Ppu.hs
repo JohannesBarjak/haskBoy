@@ -29,8 +29,8 @@ data Pixel
 data PpuMode
     = HBlank
     | VBlank
-    | OAMRead
-    | VRAMRead deriving Enum
+    | OamRead
+    | VramRead deriving (Enum, Eq)
 
 makeLenses ''Ppu
 

@@ -13,12 +13,14 @@ module HaskBoy.Ppu.Execution
     ) where
 
 import Control.Lens
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, when, mfilter)
 import Control.Monad.State.Strict
 
 import Data.Bits ((.&.), shiftR, (.|.))
 import Data.Bool (bool)
+
 import Data.Function (on)
+import Data.Foldable (asum)
 import Data.Ix (inRange)
 import Data.Maybe (fromMaybe)
 
@@ -35,14 +37,24 @@ import HaskBoy.Ppu
 
 ppuCycle :: State Emulator ()
 ppuCycle = do
-        ppuTime <- use (ppu.clock)
+    ppuTime <- use (ppu.clock)
+    prevMode <- use (mmu.ppuMode)
 
-        when (ppuTime >= 456) $ do
-            ppu.clock -= 456
+    let mode = mfilter (/= prevMode) . Just
+            $ case ppuTime `rem` 456 of
+                x | x >= 172 -> HBlank
+                x | x >= 80 -> VramRead
+                _ -> OamRead
+
+    mmu.ppuMode %= flip fromMaybe mode
+
+    case mode of
+        (Just OamRead) -> do
             mmu.ly += 1
 
             lineY <- use (mmu.ly)
             when (lineY < 144) drawTiles
+        _ -> pure ()
 
 drawTiles :: State Emulator ()
 drawTiles = do
@@ -107,12 +119,15 @@ twoCompl r8
 tileRow :: Word8 -> Word8 -> Seq Pixel
 tileRow v1 v2 = [on toPixel (toBool . (.&. 1) . (`shiftR` i)) v1 v2 | i <- [7,6..0]]
 
-ppuMode :: Lens' Mmu Pixel
+ppuMode :: Lens' Mmu PpuMode
 ppuMode = lens _ppuMode $ \mem v ->
     mem&ioreg.ix 0x41 .~ ((mem^?!ioreg.ix 0x41) .&. 0xFC) .|. fromIntegral (fromEnum v)
 
-_ppuMode :: Mmu -> Pixel
-_ppuMode mem = toEnum . fromIntegral $ (mem^?!ioreg.ix 0x41) .&. 3
+    where _ppuMode :: Mmu -> PpuMode
+          _ppuMode mem = toEnum . fromIntegral $ (mem^?!ioreg.ix 0x41) .&. 3
+
+lcdStat :: Lens' Mmu Word8
+lcdStat = lens (^?!ioreg.ix 0x41) (\mem v -> mem&ioreg.ix 0x41 .~ v)
 
 scx, scy :: Lens' Mmu Word8
 scx = lens (^?!ioreg.ix 0x43) (\mem v -> mem&ioreg.ix 0x43 .~ v)
