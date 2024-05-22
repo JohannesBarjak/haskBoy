@@ -21,7 +21,6 @@ import HaskBoy.Ppu
 
 import SDL (($=))
 import SDL qualified
-import SDL.Raw qualified
 
 import System.Environment (getArgs)
 
@@ -50,45 +49,43 @@ main = do
     filename <- head <$> getArgs
     (Just rom) <- toMemory <$> loadRom filename
 
-    emulatorLoop renderer (initialEmulator rom) 0
+    texture <- gbTexture renderer
+    emulatorLoop (initialEmulator rom) 0 renderer texture
 
+    SDL.destroyTexture texture
     SDL.destroyRenderer renderer
     SDL.destroyWindow window
 
 loadRom :: FilePath -> IO [Word8]
 loadRom f = BS.unpack <$> BS.readFile f
 
-emulatorLoop :: SDL.Renderer -> Emulator -> Integer -> IO ()
-emulatorLoop renderer prevState cycles = do
+emulatorLoop :: Emulator -> Integer -> SDL.Renderer -> SDL.Texture -> IO ()
+emulatorLoop prevState cycles renderer texture = do
     start <- SDL.time
     void . mapM handleEvent =<< SDL.pollEvents
 
     let (dp, nextState) = runState (cycleCpu cycles >> rawDisplay) prevState
-    renderGbDisplay dp renderer
+    renderGbDisplay dp renderer texture
     end <- SDL.time
 
     let newCycles = round (fromIntegral hzps * (end - start) :: Double)
-    emulatorLoop renderer nextState newCycles
+    emulatorLoop nextState newCycles renderer texture
 
 handleEvent :: SDL.Event -> IO ()
 handleEvent event = case SDL.eventPayload event of
     SDL.WindowClosedEvent _ -> error "Closed window :D"
     _ -> pure ()
 
-renderGbDisplay :: Seq Word8 -> SDL.Renderer -> IO ()
-renderGbDisplay dp renderer = do
-    text <- gbTexture renderer
-
-    pixels <- castPtr . fst <$> SDL.lockTexture text Nothing
+renderGbDisplay :: Seq Word8 -> SDL.Renderer -> SDL.Texture -> IO ()
+renderGbDisplay dp renderer texture = do
+    pixels <- castPtr . fst <$> SDL.lockTexture texture Nothing
     mapM_ (pokeElemOff pixels <*> (Seq.index dp . (`div` 3))) $ init [0..160 * 144 * 3]
 
-    SDL.unlockTexture text
+    SDL.unlockTexture texture
 
     SDL.clear renderer
-    SDL.copy renderer text Nothing Nothing
+    SDL.copy renderer texture Nothing Nothing
     SDL.present renderer
-
-    SDL.destroyTexture text
 
 rawDisplay :: State Emulator (Seq Word8)
 rawDisplay = mapM pixelToColor . join =<< use (ppu.display)
