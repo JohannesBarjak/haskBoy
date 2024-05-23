@@ -90,8 +90,8 @@ bgScanline mem
     where bgTileMaps = let ta = 0x9800 + fromIntegral ti * 32 in
             [mem^.cloneLens (addr i) | i <- [ta..ta + 32]]
 
-          tileAddress idx
-            = if mem^.bgTileData then 0x8000 + (fromIntegral idx * 16)
+          tileAddress idx = if mem^.bgTileData
+            then 0x8000 + (fromIntegral idx * 16)
             else 0x9000 + (fromIntegral (twoCompl idx) * 16)
 
           (ti, ri) = (mem^.ly + mem^.scy) `quotRem` 8
