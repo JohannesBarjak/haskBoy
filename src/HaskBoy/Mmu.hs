@@ -3,10 +3,9 @@
 module HaskBoy.Mmu
     ( Address
     , Mmu(..)
-    , rom0, rom1
-    , vram, eram, wram0, wram1
+    , rom, vram, eram, wram
     , oam, ioreg, hram, ie
-    , addr, addr16
+    , addr, addr16, raw
     , ObjAttr(..)
     , yPos, xPos, tlIdx
     , toMemory
@@ -26,12 +25,10 @@ import Data.Ix (inRange)
 import HaskBoy.BitOps
 
 data Mmu = Mmu
-    { _rom0  :: !(Seq Word8)
-    , _rom1  :: !(Seq Word8)
+    { _rom   :: !(Seq Word8)
     , _vram  :: !(Seq Word8)
     , _eram  :: !(Seq Word8)
-    , _wram0 :: !(Seq Word8)
-    , _wram1 :: !(Seq Word8)
+    , _wram  :: !(Seq Word8)
     , _oam   :: !(Seq ObjAttr)
     , _ioreg :: !(Seq Word8)
     , _hram  :: !(Seq Word8)
@@ -61,12 +58,10 @@ toMemory :: [Word8] -> Maybe Mmu
 toMemory xs = if length xs == 0x8000
         then do
             Just $ Mmu
-                { _rom0  = Seq.fromList r0
-                , _rom1  = Seq.fromList r1
+                { _rom   = Seq.fromList xs
                 , _vram  = Seq.replicate 0x2000 0
                 , _eram  = Seq.replicate 0x2000 0
-                , _wram0 = Seq.replicate 0x1000 0
-                , _wram1 = Seq.replicate 0x1000 0
+                , _wram  = Seq.replicate 0x2000 0
                 , _oam   = Seq.replicate 40 (ObjAttr 0 0 0 0)
                 , _ioreg = Seq.replicate 0x80 0
                 , _hram  = Seq.replicate 0x7F 0
@@ -74,11 +69,41 @@ toMemory xs = if length xs == 0x8000
                 }
 
         else Nothing
-        where (r0,r1) = splitAt 0x4000 xs
 
 -- | Restricted access to the 'Mmu'
 addr :: Address -> ALens' Mmu Word8
 addr i = lens (readByte i) (flip $ writeByte i)
+
+raw :: Address -> ALens' Mmu Word8
+raw i = lens readMmu writeMmu
+    where readMmu mem
+            | inRange (0x0000, 0x7FFF) i = mem^?!rom.ix (fromIntegral i)
+            | inRange (0x8000, 0x9FFF) i = mem^?!vram.ix (fromIntegral i - 0x8000)
+            | inRange (0xA000, 0xBFFF) i = mem^?!eram.ix (fromIntegral i - 0xA000)
+            | inRange (0xC000, 0xCFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
+            | inRange (0xD000, 0xDFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
+            | inRange (0xE000, 0xEFFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
+            | inRange (0xF000, 0xFDFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
+            | inRange (0xFE00, 0xFE9F) i = readOam (mem^.oam) (fromIntegral i - 0xFE00)
+            | inRange (0xFEA0, 0xFEFF) i = 0xFF
+            | inRange (0xFF00, 0xFF7F) i = mem^?!ioreg.ix (fromIntegral i - 0xFF00)
+            | inRange (0xFF80, 0xFFFE) i = mem^?!hram.ix (fromIntegral i - 0xFF80)
+            | otherwise                  = mem^?!ie
+
+          writeMmu mem v
+            | inRange (0x0000, 0x3FFF) i = mem
+            | inRange (0x4000, 0x7FFF) i = mem
+            | inRange (0x8000, 0x9FFF) i = mem&vram.ix (fromIntegral i - 0x8000) .~ v
+            | inRange (0xA000, 0xBFFF) i = mem&eram.ix (fromIntegral i - 0xA000) .~ v
+            | inRange (0xC000, 0xCFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
+            | inRange (0xD000, 0xDFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
+            | inRange (0xE000, 0xEFFF) i = mem
+            | inRange (0xF000, 0xFDFF) i = mem
+            | inRange (0xFE00, 0xFE9F) i = mem&oam %~ writeOam (fromIntegral i - 0xFE00) v
+            | inRange (0xFEA0, 0xFEFF) i = mem
+            | inRange (0xFF00, 0xFF7F) i = mem&ioreg.ix (fromIntegral i - 0xFF00) .~ v
+            | inRange (0xFF80, 0xFFFE) i = mem&hram.ix (fromIntegral i - 0xFF80) .~ v
+            | otherwise                  = mem&ie .~ v
 
 -- | Provides restricted access to a Word in the 'Mmu'.
 -- The Word is created by a pair of bytes in little endian order.
@@ -97,14 +122,13 @@ writeWord i v mmu' = writeByte i lb $ writeByte (i + 1) ub mmu'
 
 readByte :: Address -> Mmu -> Word8
 readByte i mem
-    | inRange (0x0000, 0x3FFF) i = mem^?!rom0.ix (fromIntegral i)
-    | inRange (0x4000, 0x7FFF) i = mem^?!rom1.ix (fromIntegral i - 0x4000)
+    | inRange (0x0000, 0x7FFF) i = mem^?!rom.ix (fromIntegral i)
     | inRange (0x8000, 0x9FFF) i = mem^?!vram.ix (fromIntegral i - 0x8000)
     | inRange (0xA000, 0xBFFF) i = mem^?!eram.ix (fromIntegral i - 0xA000)
-    | inRange (0xC000, 0xCFFF) i = mem^?!wram0.ix (fromIntegral i - 0xC000)
-    | inRange (0xD000, 0xDFFF) i = mem^?!wram1.ix (fromIntegral i - 0xD000)
-    | inRange (0xE000, 0xEFFF) i = mem^?!wram0.ix (fromIntegral i - 0xE000)
-    | inRange (0xF000, 0xFDFF) i = mem^?!wram1.ix (fromIntegral i - 0xF000)
+    | inRange (0xC000, 0xCFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
+    | inRange (0xD000, 0xDFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
+    | inRange (0xE000, 0xEFFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
+    | inRange (0xF000, 0xFDFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
     | inRange (0xFE00, 0xFE9F) i = readOam (mem^.oam) (fromIntegral i - 0xFE00)
     | inRange (0xFEA0, 0xFEFF) i = 0xFF
     | i == 0xFF00 = 0xCF
@@ -113,15 +137,11 @@ readByte i mem
     | otherwise                  = mem^?!ie
 
 readOam :: Seq ObjAttr -> Int -> Word8
-readOam mem av = extractByte oai $ mem^?!ix idx
+readOam mem av = extractByte $ mem^?!ix idx
     where idx = fromIntegral $ av `rem` 40
-          oai = av `rem` 4
 
-          extractByte 0 obj = obj^.yPos
-          extractByte 1 obj = obj^.xPos
-          extractByte 2 obj = obj^.tlIdx
-          extractByte 3 obj = obj^.objAttr
-          extractByte _ _ = error "Invalid argument for readOam"
+          extractByte = view $ [yPos, xPos, tlIdx, objAttr] !! oai
+          oai = av `rem` 4
 
 writeOam :: Int -> Word8 -> Seq ObjAttr -> Seq ObjAttr
 writeOam av v mem = case oai of
@@ -140,8 +160,8 @@ writeByte i v mem
     | inRange (0x4000, 0x7FFF) i = mem
     | inRange (0x8000, 0x9FFF) i = mem&vram.ix (fromIntegral i - 0x8000) .~ v
     | inRange (0xA000, 0xBFFF) i = mem&eram.ix (fromIntegral i - 0xA000) .~ v
-    | inRange (0xC000, 0xCFFF) i = mem&wram0.ix (fromIntegral i - 0xC000) .~ v
-    | inRange (0xD000, 0xDFFF) i = mem&wram1.ix (fromIntegral i - 0xD000) .~ v
+    | inRange (0xC000, 0xCFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
+    | inRange (0xD000, 0xDFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
     | inRange (0xE000, 0xEFFF) i = mem
     | inRange (0xF000, 0xFDFF) i = mem
     | inRange (0xFE00, 0xFE9F) i = mem&oam %~ writeOam (fromIntegral i - 0xFE00) v
