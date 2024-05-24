@@ -73,7 +73,7 @@ drawSprites sprites = forM_ sprites $ \(obj, srow) -> do
 spriteScan :: Mmu -> Seq (ObjAttr, Seq Pixel)
 spriteScan mem = scanAttr <&> (,) <*> ((tileRow mem . ri) <*> ti)
 
-    where scanAttr = S.take 10 $ S.filter visibleY (mem^.oam)
+    where scanAttr = S.take 10 $ S.filter visibleY (mem^.cartridge.oam)
           visibleY obj = inRange ((mem^.ly + 1 - size, mem^.ly)&both +~ 16) (obj^.yPos)
           size = bool 8 16 (mem^.objSize)
 
@@ -111,20 +111,20 @@ twoCompl r8
 
 ppuMode :: Lens' Mmu PpuMode
 ppuMode = lens _ppuMode $ \mem v ->
-    mem&ioreg.ix 0x41 .~ ((mem^?!ioreg.ix 0x41) .&. 0xFC) .|. fromIntegral (fromEnum v)
+    mem&cartridge.ioreg.ix 0x41 .~ ((mem^?!cartridge.ioreg.ix 0x41) .&. 0xFC) .|. fromIntegral (fromEnum v)
 
     where _ppuMode :: Mmu -> PpuMode
-          _ppuMode mem = toEnum . fromIntegral $ (mem^?!ioreg.ix 0x41) .&. 3
+          _ppuMode mem = toEnum . fromIntegral $ (mem^?!cartridge.ioreg.ix 0x41) .&. 3
 
 lcdStat :: Lens' Mmu Word8
 lcdStat = cloneLens $ raw 0xFF41
 
 scx, scy :: Lens' Mmu Word8
-scx = lens (^?!ioreg.ix 0x43) (\mem v -> mem&ioreg.ix 0x43 .~ v)
-scy = lens (^?!ioreg.ix 0x42) (\mem v -> mem&ioreg.ix 0x42 .~ v)
+scx = lens (^?!cartridge.ioreg.ix 0x43) (\mem v -> mem&cartridge.ioreg.ix 0x43 .~ v)
+scy = lens (^?!cartridge.ioreg.ix 0x42) (\mem v -> mem&cartridge.ioreg.ix 0x42 .~ v)
 
 lyc :: Lens' Mmu Word8
-lyc = lens (^?!ioreg.ix 0x45) (\mem v -> mem&ioreg.ix 0x45 .~ v)
+lyc = lens (^?!cartridge.ioreg.ix 0x45) (\mem v -> mem&cartridge.ioreg.ix 0x45 .~ v)
 
 ly :: Lens' Mmu Word8
 ly = cloneLens (raw 0xFF44)
@@ -139,4 +139,4 @@ winEnable = lens (^.lcdc.bit 5) (\mem v -> mem&lcdc.bit 5 .~ v)
 lcdEnable = lens (^.lcdc.bit 7) (\mem v -> mem&lcdc.bit 7 .~ v)
 
 lcdc :: Lens' Mmu Word8
-lcdc = lens (^?!ioreg.ix 0x40) (\mem v -> mem&ioreg.ix 0x40 .~ v)
+lcdc = lens (^?!cartridge.ioreg.ix 0x40) (\mem v -> mem&cartridge.ioreg.ix 0x40 .~ v)
