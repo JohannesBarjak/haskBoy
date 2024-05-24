@@ -45,12 +45,14 @@ main = do
     renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
 
     SDL.rendererLogicalSize renderer $= Just (SDL.V2 160 144)
+    texture <- gbTexture renderer
 
     filename <- head <$> getArgs
-    (Just rom) <- toMemory <$> loadRom filename
+    parsedRom <- toMemory <$> loadRom filename
 
-    texture <- gbTexture renderer
-    emulatorLoop (initialEmulator rom) 0 renderer texture
+    case parsedRom of
+        Just mem -> emulatorLoop (initialEmulator mem) 0 renderer texture
+        Nothing  -> putStrLn "Couldn't parse file as a gameboy cartridge"
 
     SDL.destroyTexture texture
     SDL.destroyRenderer renderer
