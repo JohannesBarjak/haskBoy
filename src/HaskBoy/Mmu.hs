@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module HaskBoy.Mmu
     ( Address
@@ -48,17 +49,18 @@ makeLenses ''Mmu
 makeLenses ''ObjAttr
 
 toMemory :: [Word8] -> Maybe Mmu
-toMemory xs = if length xs == 0x8000 then
-    Just $ Mmu
-        { _rom   = Seq.fromList xs
-        , _vram  = Seq.replicate 0x2000 0
-        , _eram  = Seq.replicate 0x2000 0
-        , _wram  = Seq.replicate 0x2000 0
-        , _oam   = Seq.replicate 40 (ObjAttr 0 0 0 0)
-        , _ioreg = Seq.replicate 0x80 0
-        , _hram  = Seq.replicate 0x7F 0
-        , _ie    = 0
-        }
+toMemory xs = do
+    let _rom   = Seq.fromList xs
+    let _vram  = Seq.replicate 0x2000 0
+    let _eram  = Seq.replicate 0x2000 0
+    let _wram  = Seq.replicate 0x2000 0
+    let _oam   = Seq.replicate 40 (ObjAttr 0 0 0 0)
+    let _ioreg = Seq.replicate 0x80 0
+    let _hram  = Seq.replicate 0x7F 0
+    let _ie    = 0
+
+    if length xs == 0x8000 then
+        Just $ Mmu {..}
 
         else Nothing
 
