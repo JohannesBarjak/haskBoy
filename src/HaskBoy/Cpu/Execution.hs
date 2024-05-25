@@ -211,11 +211,11 @@ toInstruction = \case
 
         0x03 -> pure (Inc16 bc)
 
-        i | i .&. 0xC7 == 0x04 -> Inc <$> toArgument (extractOctalArg 3 i)
-        i | i .&. 0xC7 == 0x05 -> Dec <$> toArgument (extractOctalArg 3 i)
+        i | i .&. 0xC7 == 0x04 -> Inc . toArgument (extractOctalArg 3 i) <$> get
+        i | i .&. 0xC7 == 0x05 -> Dec . toArgument (extractOctalArg 3 i) <$> get
 
         i | i .&. 0xC7 == 0x06 ->
-            Ld <$> toArgument (extractOctalArg 3 i)
+            Ld  . toArgument (extractOctalArg 3 i) <$> get
                <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
 
         0x09 -> pure $ Add16 bc
@@ -230,22 +230,22 @@ toInstruction = \case
         0x39 -> pure $ Add16 sp
         0x3B -> pure (Dec16 sp)
 
-        i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.b) <$> toArgument (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x48 -> Ld (Register $ register.c) <$> toArgument (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x50 -> Ld (Register $ register.d) <$> toArgument (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x58 -> Ld (Register $ register.e) <$> toArgument (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x60 -> Ld (Register $ register.h) <$> toArgument (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x68 -> Ld (Register $ register.l) <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.b) . toArgument (extractOctalArg 0 i) <$> get
+        i | i .&. 0xF8 == 0x48 -> Ld (Register $ register.c) . toArgument (extractOctalArg 0 i) <$> get
+        i | i .&. 0xF8 == 0x50 -> Ld (Register $ register.d) . toArgument (extractOctalArg 0 i) <$> get
+        i | i .&. 0xF8 == 0x58 -> Ld (Register $ register.e) . toArgument (extractOctalArg 0 i) <$> get
+        i | i .&. 0xF8 == 0x60 -> Ld (Register $ register.h) . toArgument (extractOctalArg 0 i) <$> get
+        i | i .&. 0xF8 == 0x68 -> Ld (Register $ register.l) . toArgument (extractOctalArg 0 i) <$> get
 
         i | i .&. 0xF8 == 0x70 -> do
             v <- use (cpu.register.hl)
-            Ld (Address $ addr v) <$> toArgument (extractOctalArg 0 i)
+            Ld (Address $ addr v) . toArgument (extractOctalArg 0 i) <$> get
 
-        i | i .&. 0xF8 == 0x78 -> Ld (Register $ register.a) <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x78 -> Ld (Register $ register.a) . toArgument (extractOctalArg 0 i) <$> get
 
-        i | i .&. 0xF8 == 0x90 -> Sub <$> toArgument (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0x98 -> Sbc <$> toArgument (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0xA8 -> Xor <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x90 -> Sub . toArgument (extractOctalArg 0 i) <$> get
+        i | i .&. 0xF8 == 0x98 -> Sbc . toArgument (extractOctalArg 0 i) <$> get
+        i | i .&. 0xF8 == 0xA8 -> Xor . toArgument (extractOctalArg 0 i) <$> get
 
         0x12 -> do
             nn <- use (cpu.register.de)
@@ -272,7 +272,7 @@ toInstruction = \case
         0x2A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<+= 1)
         0x3A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<-= 1)
 
-        i | i .&. 0xF8 == 0x80 -> Add <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0x80 -> Add . toArgument (extractOctalArg 0 i) <$> get
 
         0x18 -> pure (Jr True)
         0x20 -> Jr . not <$> use (cpu.register.zero)
@@ -290,9 +290,9 @@ toInstruction = \case
             nn <- use (cpu.register.hl)
             pure $ Ld (Address $ addr nn) (Register $ register.a)
 
-        i | i .&. 0xF8 == 0xA0 -> And <$> toArgument (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0xB0 -> Or <$> toArgument (extractOctalArg 0 i)
-        i | i .&. 0xF8 == 0xB8 -> Cmp <$> toArgument (extractOctalArg 0 i)
+        i | i .&. 0xF8 == 0xA0 -> And . toArgument (extractOctalArg 0 i) <$> get
+        i | i .&. 0xF8 == 0xB0 -> Or . toArgument (extractOctalArg 0 i) <$> get
+        i | i .&. 0xF8 == 0xB8 -> Cmp . toArgument (extractOctalArg 0 i) <$> get
 
         0xC0 -> pure $ Ret (Just NZ)
         0xC8 -> pure $ Ret (Just Z)
@@ -314,18 +314,18 @@ toInstruction = \case
 
         0xCB -> consumeByte >>= \case
 
-            i | i .&. 0xF8 == 0x30 -> Swap <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0x48 -> Bit 1 <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0x78 -> Bit 7 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0x30 -> Swap . toArgument (extractOctalArg 0 i) <$> get
+            i | i .&. 0xF8 == 0x48 -> Bit 1 . toArgument (extractOctalArg 0 i) <$> get
+            i | i .&. 0xF8 == 0x78 -> Bit 7 . toArgument (extractOctalArg 0 i) <$> get
 
-            i | i .&. 0xF8 == 0xC0 -> Set 0 <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0xC8 -> Set 1 <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0xD0 -> Set 2 <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0xD8 -> Set 3 <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0xE0 -> Set 4 <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0xE8 -> Set 5 <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0xF0 -> Set 6 <$> toArgument (extractOctalArg 0 i)
-            i | i .&. 0xF8 == 0xF8 -> Set 7 <$> toArgument (extractOctalArg 0 i)
+            i | i .&. 0xF8 == 0xC0 -> Set 0 . toArgument (extractOctalArg 0 i) <$> get
+            i | i .&. 0xF8 == 0xC8 -> Set 1 . toArgument (extractOctalArg 0 i) <$> get
+            i | i .&. 0xF8 == 0xD0 -> Set 2 . toArgument (extractOctalArg 0 i) <$> get
+            i | i .&. 0xF8 == 0xD8 -> Set 3 . toArgument (extractOctalArg 0 i) <$> get
+            i | i .&. 0xF8 == 0xE0 -> Set 4 . toArgument (extractOctalArg 0 i) <$> get
+            i | i .&. 0xF8 == 0xE8 -> Set 5 . toArgument (extractOctalArg 0 i) <$> get
+            i | i .&. 0xF8 == 0xF0 -> Set 6 . toArgument (extractOctalArg 0 i) <$> get
+            i | i .&. 0xF8 == 0xF8 -> Set 7 . toArgument (extractOctalArg 0 i) <$> get
 
             arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
@@ -389,20 +389,17 @@ toInstruction = \case
 
         instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
-toArgument :: Word8 -> State Emulator (Argument Word8)
-toArgument 0 = pure $ Register (register.b)
-toArgument 1 = pure $ Register (register.c)
-toArgument 2 = pure $ Register (register.d)
-toArgument 3 = pure $ Register (register.e)
-toArgument 4 = pure $ Register (register.h)
-toArgument 5 = pure $ Register (register.l)
-
-toArgument 6 = do
-    nn <- use (cpu.register.hl)
-    pure $ Address (addr nn)
-
-toArgument 7 = pure $ Register (register.a)
-toArgument _ = error "Invalid instructionn argument"
+toArgument :: Word8 -> Emulator -> Argument Word8
+toArgument n s = case n of
+        0 -> Register (register.b)
+        1 -> Register (register.c)
+        2 -> Register (register.d)
+        3 -> Register (register.e)
+        4 -> Register (register.h)
+        5 -> Register (register.l)
+        6 -> Address (addr (s^.cpu.register.hl))
+        7 -> Register (register.a)
+        _ -> error "Invalid instructionn argument"
 
 extractOctalArg :: (Bits a, Num a) => Int -> a -> a
 extractOctalArg i v = shiftR v i .&. 7
