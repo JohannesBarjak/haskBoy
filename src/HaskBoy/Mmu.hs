@@ -6,7 +6,6 @@ module HaskBoy.Mmu
     , rom, vram, eram, wram
     , oam, ioreg, hram, ie
     , addr, addr16, raw
-    , cheader, cartridge
     , ObjAttr(..)
     , yPos, xPos, tlIdx
     , toMemory
@@ -26,11 +25,6 @@ import Data.Ix (inRange)
 import HaskBoy.BitOps
 
 data Mmu = Mmu
-    { _cheader   :: CartridgeHeader
-    , _cartridge :: Cartridge
-    }
-
-data Cartridge = Cartridge
     { _rom   :: !(Seq Word8)
     , _vram  :: !(Seq Word8)
     , _eram  :: !(Seq Word8)
@@ -50,30 +44,20 @@ data ObjAttr = ObjAttr
 
 type Address = Word16
 
-data CartridgeHeader = CartridgeHeader
-    { _cartridgeType :: !Word8
-    , _romSize :: !Word8
-    , _ramSize :: !Word8
-    }
-
 makeLenses ''Mmu
-makeLenses '' Cartridge
-makeLenses ''CartridgeHeader
 makeLenses ''ObjAttr
 
 toMemory :: [Word8] -> Maybe Mmu
 toMemory xs = if length xs == 0x8000 then
     Just $ Mmu
-        { _cartridge = Cartridge
-            { _rom   = Seq.fromList xs
-            , _vram  = Seq.replicate 0x2000 0
-            , _eram  = Seq.replicate 0x2000 0
-            , _wram  = Seq.replicate 0x2000 0
-            , _oam   = Seq.replicate 40 (ObjAttr 0 0 0 0)
-            , _ioreg = Seq.replicate 0x80 0
-            , _hram  = Seq.replicate 0x7F 0
-            , _ie    = 0
-            }
+        { _rom   = Seq.fromList xs
+        , _vram  = Seq.replicate 0x2000 0
+        , _eram  = Seq.replicate 0x2000 0
+        , _wram  = Seq.replicate 0x2000 0
+        , _oam   = Seq.replicate 40 (ObjAttr 0 0 0 0)
+        , _ioreg = Seq.replicate 0x80 0
+        , _hram  = Seq.replicate 0x7F 0
+        , _ie    = 0
         }
 
         else Nothing
@@ -85,33 +69,33 @@ addr i = lens (readByte i) (flip $ writeByte i)
 raw :: Address -> ALens' Mmu Word8
 raw i = lens readMmu writeMmu
     where readMmu mem
-            | inRange (0x0000, 0x7FFF) i = mem^?!cartridge.rom.ix (fromIntegral i)
-            | inRange (0x8000, 0x9FFF) i = mem^?!cartridge.vram.ix (fromIntegral i - 0x8000)
-            | inRange (0xA000, 0xBFFF) i = mem^?!cartridge.eram.ix (fromIntegral i - 0xA000)
-            | inRange (0xC000, 0xCFFF) i = mem^?!cartridge.wram.ix (fromIntegral i - 0xC000)
-            | inRange (0xD000, 0xDFFF) i = mem^?!cartridge.wram.ix (fromIntegral i - 0xC000)
-            | inRange (0xE000, 0xEFFF) i = mem^?!cartridge.wram.ix (fromIntegral i - 0xE000)
-            | inRange (0xF000, 0xFDFF) i = mem^?!cartridge.wram.ix (fromIntegral i - 0xE000)
-            | inRange (0xFE00, 0xFE9F) i = readOam (mem^.cartridge.oam) (fromIntegral i - 0xFE00)
+            | inRange (0x0000, 0x7FFF) i = mem^?!rom.ix (fromIntegral i)
+            | inRange (0x8000, 0x9FFF) i = mem^?!vram.ix (fromIntegral i - 0x8000)
+            | inRange (0xA000, 0xBFFF) i = mem^?!eram.ix (fromIntegral i - 0xA000)
+            | inRange (0xC000, 0xCFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
+            | inRange (0xD000, 0xDFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
+            | inRange (0xE000, 0xEFFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
+            | inRange (0xF000, 0xFDFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
+            | inRange (0xFE00, 0xFE9F) i = readOam (mem^.oam) (fromIntegral i - 0xFE00)
             | inRange (0xFEA0, 0xFEFF) i = 0xFF
-            | inRange (0xFF00, 0xFF7F) i = mem^?!cartridge.ioreg.ix (fromIntegral i - 0xFF00)
-            | inRange (0xFF80, 0xFFFE) i = mem^?!cartridge.hram.ix (fromIntegral i - 0xFF80)
-            | otherwise                  = mem^?!cartridge.ie
+            | inRange (0xFF00, 0xFF7F) i = mem^?!ioreg.ix (fromIntegral i - 0xFF00)
+            | inRange (0xFF80, 0xFFFE) i = mem^?!hram.ix (fromIntegral i - 0xFF80)
+            | otherwise                  = mem^?!ie
 
           writeMmu mem v
             | inRange (0x0000, 0x3FFF) i = mem
             | inRange (0x4000, 0x7FFF) i = mem
-            | inRange (0x8000, 0x9FFF) i = mem&cartridge.vram.ix (fromIntegral i - 0x8000) .~ v
-            | inRange (0xA000, 0xBFFF) i = mem&cartridge.eram.ix (fromIntegral i - 0xA000) .~ v
-            | inRange (0xC000, 0xCFFF) i = mem&cartridge.wram.ix (fromIntegral i - 0xC000) .~ v
-            | inRange (0xD000, 0xDFFF) i = mem&cartridge.wram.ix (fromIntegral i - 0xC000) .~ v
+            | inRange (0x8000, 0x9FFF) i = mem&vram.ix (fromIntegral i - 0x8000) .~ v
+            | inRange (0xA000, 0xBFFF) i = mem&eram.ix (fromIntegral i - 0xA000) .~ v
+            | inRange (0xC000, 0xCFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
+            | inRange (0xD000, 0xDFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
             | inRange (0xE000, 0xEFFF) i = mem
             | inRange (0xF000, 0xFDFF) i = mem
-            | inRange (0xFE00, 0xFE9F) i = mem&cartridge.oam %~ writeOam (fromIntegral i - 0xFE00) v
+            | inRange (0xFE00, 0xFE9F) i = mem&oam %~ writeOam (fromIntegral i - 0xFE00) v
             | inRange (0xFEA0, 0xFEFF) i = mem
-            | inRange (0xFF00, 0xFF7F) i = mem&cartridge.ioreg.ix (fromIntegral i - 0xFF00) .~ v
-            | inRange (0xFF80, 0xFFFE) i = mem&cartridge.hram.ix (fromIntegral i - 0xFF80) .~ v
-            | otherwise                  = mem&cartridge.ie .~ v
+            | inRange (0xFF00, 0xFF7F) i = mem&ioreg.ix (fromIntegral i - 0xFF00) .~ v
+            | inRange (0xFF80, 0xFFFE) i = mem&hram.ix (fromIntegral i - 0xFF80) .~ v
+            | otherwise                  = mem&ie .~ v
 
 -- | Provides restricted access to a Word in the 'Mmu'.
 -- The Word is created by a pair of bytes in little endian order.
@@ -130,19 +114,19 @@ writeWord i v mmu' = writeByte i lb $ writeByte (i + 1) ub mmu'
 
 readByte :: Address -> Mmu -> Word8
 readByte i mem
-    | inRange (0x0000, 0x7FFF) i = mem^?!cartridge.rom.ix (fromIntegral i)
-    | inRange (0x8000, 0x9FFF) i = mem^?!cartridge.vram.ix (fromIntegral i - 0x8000)
-    | inRange (0xA000, 0xBFFF) i = mem^?!cartridge.eram.ix (fromIntegral i - 0xA000)
-    | inRange (0xC000, 0xCFFF) i = mem^?!cartridge.wram.ix (fromIntegral i - 0xC000)
-    | inRange (0xD000, 0xDFFF) i = mem^?!cartridge.wram.ix (fromIntegral i - 0xC000)
-    | inRange (0xE000, 0xEFFF) i = mem^?!cartridge.wram.ix (fromIntegral i - 0xE000)
-    | inRange (0xF000, 0xFDFF) i = mem^?!cartridge.wram.ix (fromIntegral i - 0xE000)
-    | inRange (0xFE00, 0xFE9F) i = readOam (mem^.cartridge.oam) (fromIntegral i - 0xFE00)
+    | inRange (0x0000, 0x7FFF) i = mem^?!rom.ix (fromIntegral i)
+    | inRange (0x8000, 0x9FFF) i = mem^?!vram.ix (fromIntegral i - 0x8000)
+    | inRange (0xA000, 0xBFFF) i = mem^?!eram.ix (fromIntegral i - 0xA000)
+    | inRange (0xC000, 0xCFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
+    | inRange (0xD000, 0xDFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
+    | inRange (0xE000, 0xEFFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
+    | inRange (0xF000, 0xFDFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
+    | inRange (0xFE00, 0xFE9F) i = readOam (mem^.oam) (fromIntegral i - 0xFE00)
     | inRange (0xFEA0, 0xFEFF) i = 0xFF
     | i == 0xFF00 = 0xCF
-    | inRange (0xFF00, 0xFF7F) i = mem^?!cartridge.ioreg.ix (fromIntegral i - 0xFF00)
-    | inRange (0xFF80, 0xFFFE) i = mem^?!cartridge.hram.ix (fromIntegral i - 0xFF80)
-    | otherwise                  = mem^?!cartridge.ie
+    | inRange (0xFF00, 0xFF7F) i = mem^?!ioreg.ix (fromIntegral i - 0xFF00)
+    | inRange (0xFF80, 0xFFFE) i = mem^?!hram.ix (fromIntegral i - 0xFF80)
+    | otherwise                  = mem^?!ie
 
 readOam :: Seq ObjAttr -> Int -> Word8
 readOam mem av = extractByte $ mem^?!ix idx
@@ -166,21 +150,21 @@ writeByte :: Address -> Word8 -> Mmu -> Mmu
 writeByte i v mem
     | inRange (0x0000, 0x3FFF) i = mem
     | inRange (0x4000, 0x7FFF) i = mem
-    | inRange (0x8000, 0x9FFF) i = mem&cartridge.vram.ix (fromIntegral i - 0x8000) .~ v
-    | inRange (0xA000, 0xBFFF) i = mem&cartridge.eram.ix (fromIntegral i - 0xA000) .~ v
-    | inRange (0xC000, 0xCFFF) i = mem&cartridge.wram.ix (fromIntegral i - 0xC000) .~ v
-    | inRange (0xD000, 0xDFFF) i = mem&cartridge.wram.ix (fromIntegral i - 0xC000) .~ v
+    | inRange (0x8000, 0x9FFF) i = mem&vram.ix (fromIntegral i - 0x8000) .~ v
+    | inRange (0xA000, 0xBFFF) i = mem&eram.ix (fromIntegral i - 0xA000) .~ v
+    | inRange (0xC000, 0xCFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
+    | inRange (0xD000, 0xDFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
     | inRange (0xE000, 0xEFFF) i = mem
     | inRange (0xF000, 0xFDFF) i = mem
-    | inRange (0xFE00, 0xFE9F) i = mem&cartridge.oam %~ writeOam (fromIntegral i - 0xFE00) v
+    | inRange (0xFE00, 0xFE9F) i = mem&oam %~ writeOam (fromIntegral i - 0xFE00) v
     | inRange (0xFEA0, 0xFEFF) i = mem
     | inRange (0xFF00, 0xFF7F) i = let rdOnly = [0x44] in
             if i `notElem` rdOnly then 
-                mem&cartridge.ioreg.ix (fromIntegral i - 0xFF00) .~ v
+                mem&ioreg.ix (fromIntegral i - 0xFF00) .~ v
             else mem
 
-    | inRange (0xFF80, 0xFFFE) i = mem&cartridge.hram.ix (fromIntegral i - 0xFF80) .~ v
-    | otherwise                  = mem&cartridge.ie .~ v
+    | inRange (0xFF80, 0xFFFE) i = mem&hram.ix (fromIntegral i - 0xFF80) .~ v
+    | otherwise                  = mem&ie .~ v
 
 objPri, yFlip, xFlip, dmgPal :: Lens' ObjAttr Bool
 objPri = lens (^.objAttr.bit 7) (\obj v -> obj&objAttr.bit 7 .~ v)
