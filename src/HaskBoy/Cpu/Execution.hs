@@ -62,133 +62,133 @@ data Argument a where
 
 execute :: Instruction -> State Emulator ()
 execute = \case
-        Nop -> mcycle 1
+    Nop -> mcycle 1
 
-        Ld lhs rhs -> mcycle 1 >> case lhs of
-                Register lr -> do
-                    case rhs of
-                        Register rr -> cpu.cloneLens lr <~ use (cpu.cloneLens rr)
-                        Address av -> do
-                            mcycle 1
-                            cpu.cloneLens lr <~ use (mmu.cloneLens av)
+    Ld lhs rhs -> mcycle 1 >> case lhs of
+            Register lr -> do
+                case rhs of
+                    Register rr -> cpu.cloneLens lr <~ use (cpu.cloneLens rr)
+                    Address av -> do
+                        mcycle 1
+                        cpu.cloneLens lr <~ use (mmu.cloneLens av)
 
-                Address v -> mcycle 1 >> case rhs of
-                        Register r -> mmu.cloneLens v <~ use (cpu.cloneLens r)
-                        Address av -> do
-                            mcycle 1
-                            mmu.cloneLens v <~ use (mmu.cloneLens av)
+            Address v -> mcycle 1 >> case rhs of
+                    Register r -> mmu.cloneLens v <~ use (cpu.cloneLens r)
+                    Address av -> do
+                        mcycle 1
+                        mmu.cloneLens v <~ use (mmu.cloneLens av)
 
-        Store16 r v -> mcycle 3 >> cloneLens r .= v
+    Store16 r v -> mcycle 3 >> cloneLens r .= v
 
-        StackStore v -> do
-            mcycle 3
-            p <- use (cpu.register.sp)
+    StackStore v -> do
+        mcycle 3
+        p <- use (cpu.register.sp)
 
-            cpu.register.zero .= False
-            cpu.register.subOp .= False
-            cpu.register.hcarry .= (fromIntegral v .&. 0xF + (p .&. 0xF) > 0xF)
-            cpu.register.carry .= (toInteger v + toInteger p > 0xFF)
+        cpu.register.zero .= False
+        cpu.register.subOp .= False
+        cpu.register.hcarry .= (fromIntegral v .&. 0xF + (p .&. 0xF) > 0xF)
+        cpu.register.carry .= (toInteger v + toInteger p > 0xFF)
 
-            cpu.register.hl .= p + fromIntegral v
+        cpu.register.hl .= p + fromIntegral v
 
-        Xor bs -> mcycle 1 >> case bs of
-                Register r -> xor =<< use (cpu.cloneLens r)
-                Address v -> mcycle 1 >> (xor =<< use (mmu.cloneLens v))
+    Xor bs -> mcycle 1 >> case bs of
+            Register r -> xor =<< use (cpu.cloneLens r)
+            Address v -> mcycle 1 >> (xor =<< use (mmu.cloneLens v))
 
-        Or bs -> mcycle 1 >> case bs of
-                Register r -> Instr.or (cpu.r)
-                Address v -> mcycle 1 >> Instr.or (mmu.v)
+    Or bs -> mcycle 1 >> case bs of
+            Register r -> Instr.or (cpu.r)
+            Address v -> mcycle 1 >> Instr.or (mmu.v)
 
-        Cpl -> mcycle 1 >> cpl
+    Cpl -> mcycle 1 >> cpl
 
-        And bs -> mcycle 1 >> case bs of
-                Register r -> Instr.and =<< use (cpu.cloneLens r)
-                Address v -> mcycle 1 >> (Instr.and =<< use (mmu.cloneLens v))
+    And bs -> mcycle 1 >> case bs of
+            Register r -> Instr.and =<< use (cpu.cloneLens r)
+            Address v -> mcycle 1 >> (Instr.and =<< use (mmu.cloneLens v))
 
-        Inc bs -> mcycle 1 >> case bs of
-                Register r -> inc (cpu.r)
-                Address av -> mcycle 2 >> inc (mmu.av)
+    Inc bs -> mcycle 1 >> case bs of
+            Register r -> inc (cpu.r)
+            Address av -> mcycle 2 >> inc (mmu.av)
 
-        Dec bs -> mcycle 1 >> case bs of
-                Register r -> dec (cpu.r)
-                Address av -> mcycle 2 >> dec (mmu.av)
+    Dec bs -> mcycle 1 >> case bs of
+            Register r -> dec (cpu.r)
+            Address av -> mcycle 2 >> dec (mmu.av)
 
-        Dec16 r -> do
-            mcycle 2
-            cpu.register.cloneLens r -= 1
+    Dec16 r -> do
+        mcycle 2
+        cpu.register.cloneLens r -= 1
 
-        Add bs -> mcycle 1 >> case bs of
-                Register r -> add =<< use (cpu.cloneLens r)
-                Address av -> mcycle 1 >> (add =<< use (mmu.cloneLens av))
+    Add bs -> mcycle 1 >> case bs of
+            Register r -> add =<< use (cpu.cloneLens r)
+            Address av -> mcycle 1 >> (add =<< use (mmu.cloneLens av))
 
-        Add16 v -> mcycle 2 >> add16 (cpu.register.v)
+    Add16 v -> mcycle 2 >> add16 (cpu.register.v)
 
-        Sub bs -> mcycle 1 >> case bs of
-            Register r -> sub (cpu.r)
-            Address av -> mcycle 1 >> sub (mmu. av)
+    Sub bs -> mcycle 1 >> case bs of
+        Register r -> sub (cpu.r)
+        Address av -> mcycle 1 >> sub (mmu. av)
 
-        Sbc v -> mcycle 1 >> case v of
-            Register r -> sbc =<< use (cpu.cloneLens r)
-            Address av -> mcycle 1 >> (sbc =<< use (mmu.cloneLens av))
+    Sbc v -> mcycle 1 >> case v of
+        Register r -> sbc =<< use (cpu.cloneLens r)
+        Address av -> mcycle 1 >> (sbc =<< use (mmu.cloneLens av))
 
-        Swap bs -> mcycle 2 >> case bs of
-            Register r -> swap (cpu.r)
-            Address av -> mcycle 2 >> swap (mmu.av)
+    Swap bs -> mcycle 2 >> case bs of
+        Register r -> swap (cpu.r)
+        Address av -> mcycle 2 >> swap (mmu.av)
 
-        Bit n bs -> mcycle 2 >> case bs of
-            Register r -> bit n (cpu.r)
-            Address av -> mcycle 1 >> bit n (mmu.av)
+    Bit n bs -> mcycle 2 >> case bs of
+        Register r -> bit n (cpu.r)
+        Address av -> mcycle 1 >> bit n (mmu.av)
 
-        Set n bs -> mcycle 2 >> case bs of
-            Register r -> cpu.cloneLens r.BOps.bit n .= True
-            Address av -> mcycle 2 >> mmu.cloneLens av.BOps.bit n .= True
+    Set n bs -> mcycle 2 >> case bs of
+        Register r -> cpu.cloneLens r.BOps.bit n .= True
+        Address av -> mcycle 2 >> mmu.cloneLens av.BOps.bit n .= True
 
-        Inc16 r -> do
-            mcycle 2
-            cpu.register.cloneLens r += 1
+    Inc16 r -> do
+        mcycle 2
+        cpu.register.cloneLens r += 1
 
-        Cmp bs -> mcycle 1 >> case bs of
-            Register r -> cmp (cpu.r)
-            Address av -> mcycle 1 >> cmp (mmu.av)
+    Cmp bs -> mcycle 1 >> case bs of
+        Register r -> cmp (cpu.r)
+        Address av -> mcycle 1 >> cmp (mmu.av)
 
-        Jr v -> jr v
-        Jmp v -> cpu.register.pc .= v
+    Jr v -> jr v
+    Jmp v -> cpu.register.pc .= v
 
-        JmpC k w -> do
-            mcycle 3
-            zoom cpu (condition k) >>=
-                flip when (mcycle 1 >> jmp w)
+    JmpC k w -> do
+        mcycle 3
+        zoom cpu (condition k) >>=
+            flip when (mcycle 1 >> jmp w)
 
-        Push v -> do
-            mcycle 4
-            pushStack v
+    Push v -> do
+        mcycle 4
+        pushStack v
 
-        Pop r -> do
-            mcycle 3
-            cpu.register . cloneLens r <~ popStack
+    Pop r -> do
+        mcycle 3
+        cpu.register . cloneLens r <~ popStack
 
-        PopAF -> do
-            mcycle 3
-            v <- use (cpu.register.flag)
-            cpu.register.af <~ popStack
-            cpu.register.flag .= v
+    PopAF -> do
+        mcycle 3
+        v <- use (cpu.register.flag)
+        cpu.register.af <~ popStack
+        cpu.register.flag .= v
 
-        Call v -> call v
+    Call v -> call v
 
-        Rst v -> do
-            mcycle 4
-            pushStack v
-            jmp v
+    Rst v -> do
+        mcycle 4
+        pushStack v
+        jmp v
 
-        Ret mk -> mcycle 2 >> case mk of
-                Just k -> do
-                    mcycle 3
-                    zoom cpu (condition k) >>= flip when ret
+    Ret mk -> mcycle 2 >> case mk of
+            Just k -> do
+                mcycle 3
+                zoom cpu (condition k) >>= flip when ret
 
-                Nothing -> mcycle 2 >> ret
+            Nothing -> mcycle 2 >> ret
 
-        EnableInterrupt -> mcycle 1 >> cpu.interruptEnable .= True
-        DisableInterrupt -> mcycle 1 >> cpu.interruptEnable .= False
+    EnableInterrupt -> mcycle 1 >> cpu.interruptEnable .= True
+    DisableInterrupt -> mcycle 1 >> cpu.interruptEnable .= False
 
 mcycle :: Integer -> State Emulator ()
 mcycle v = cpu.tclock += (v * 4)
@@ -201,202 +201,202 @@ condition NZ = not <$> use (register.zero)
 
 toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
-        0x00 -> pure Nop
+    0x00 -> pure Nop
 
-        0x01 -> Store16 (cpu.register.bc) <$> consumeWord
+    0x01 -> Store16 (cpu.register.bc) <$> consumeWord
 
-        0x02 -> do
-            nn <- use (cpu.register.bc)
-            pure $ Ld (Address $ addr nn) (Register $ register.a)
+    0x02 -> do
+        nn <- use (cpu.register.bc)
+        pure $ Ld (Address $ addr nn) (Register $ register.a)
 
-        0x03 -> pure (Inc16 bc)
+    0x03 -> pure (Inc16 bc)
 
-        i | i .&. 0xC7 == 0x04 -> Inc . toArgument 3 i <$> use cpu
-        i | i .&. 0xC7 == 0x05 -> Dec . toArgument 3 i <$> use cpu
+    i | i .&. 0xC7 == 0x04 -> Inc . toArgument 3 i <$> use cpu
+    i | i .&. 0xC7 == 0x05 -> Dec . toArgument 3 i <$> use cpu
 
-        i | i .&. 0xC7 == 0x06 ->
-            Ld  . toArgument 3 i <$> use cpu
-               <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
+    i | i .&. 0xC7 == 0x06 ->
+        Ld  . toArgument 3 i <$> use cpu
+           <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
 
-        0x09 -> pure $ Add16 bc
-        0x0B -> pure (Dec16 bc)
-        0x13 -> pure (Inc16 de)
-        0x19 -> pure $ Add16 de
-        0x1B -> pure (Dec16 de)
-        0x2B -> pure (Dec16 hl)
-        0x23 -> pure (Inc16 hl)
-        0x29 -> pure $ Add16 hl
-        0x33 -> pure (Inc16 sp)
-        0x39 -> pure $ Add16 sp
-        0x3B -> pure (Dec16 sp)
+    0x09 -> pure $ Add16 bc
+    0x0B -> pure (Dec16 bc)
+    0x13 -> pure (Inc16 de)
+    0x19 -> pure $ Add16 de
+    0x1B -> pure (Dec16 de)
+    0x2B -> pure (Dec16 hl)
+    0x23 -> pure (Inc16 hl)
+    0x29 -> pure $ Add16 hl
+    0x33 -> pure (Inc16 sp)
+    0x39 -> pure $ Add16 sp
+    0x3B -> pure (Dec16 sp)
 
-        i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.b) . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x48 -> Ld (Register $ register.c) . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x50 -> Ld (Register $ register.d) . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x58 -> Ld (Register $ register.e) . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x60 -> Ld (Register $ register.h) . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x68 -> Ld (Register $ register.l) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.b) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x48 -> Ld (Register $ register.c) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x50 -> Ld (Register $ register.d) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x58 -> Ld (Register $ register.e) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x60 -> Ld (Register $ register.h) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x68 -> Ld (Register $ register.l) . toArgument 0 i <$> use cpu
 
-        i | i .&. 0xF8 == 0x70 -> do
-            v <- use (cpu.register.hl)
-            Ld (Address $ addr v) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x70 -> do
+        v <- use (cpu.register.hl)
+        Ld (Address $ addr v) . toArgument 0 i <$> use cpu
 
-        i | i .&. 0xF8 == 0x78 -> Ld (Register $ register.a) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x78 -> Ld (Register $ register.a) . toArgument 0 i <$> use cpu
 
-        i | i .&. 0xF8 == 0x90 -> Sub . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x98 -> Sbc . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xA8 -> Xor . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x90 -> Sub . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x98 -> Sbc . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0xA8 -> Xor . toArgument 0 i <$> use cpu
 
-        0x12 -> do
-            nn <- use (cpu.register.de)
-            pure $ Ld (Address $ addr nn) (Register $ register.a)
+    0x12 -> do
+        nn <- use (cpu.register.de)
+        pure $ Ld (Address $ addr nn) (Register $ register.a)
 
-        0x22 -> do
-            nn <- cpu.register.hl <<+= 1
-            pure $ Ld (Address $ addr nn) (Register $ register.a)
+    0x22 -> do
+        nn <- cpu.register.hl <<+= 1
+        pure $ Ld (Address $ addr nn) (Register $ register.a)
 
-        0x31 -> Store16 (cpu.register.sp) <$> consumeWord
+    0x31 -> Store16 (cpu.register.sp) <$> consumeWord
 
-        0x32 -> do
-            nn <- cpu.register.hl <<-= 1
-            pure $ Ld (Address $ addr nn) (Register $ register.a)
+    0x32 -> do
+        nn <- cpu.register.hl <<-= 1
+        pure $ Ld (Address $ addr nn) (Register $ register.a)
 
-        0x0A -> do
-            nn <- use (cpu.register.bc)
-            pure $ Ld (Register $ register.a) (Address $ addr nn)
+    0x0A -> do
+        nn <- use (cpu.register.bc)
+        pure $ Ld (Register $ register.a) (Address $ addr nn)
 
-        0x1A -> do
-            nn <- use (cpu.register.de)
-            pure $ Ld (Register $ register.a) (Address $ addr nn)
+    0x1A -> do
+        nn <- use (cpu.register.de)
+        pure $ Ld (Register $ register.a) (Address $ addr nn)
 
-        0x2A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<+= 1)
-        0x3A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<-= 1)
+    0x2A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<+= 1)
+    0x3A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<-= 1)
 
-        i | i .&. 0xF8 == 0x80 -> Add . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x80 -> Add . toArgument 0 i <$> use cpu
 
-        0x18 -> pure (Jr True)
-        0x20 -> Jr . not <$> use (cpu.register.zero)
-        0x28 -> Jr <$> use (cpu.register.zero)
+    0x18 -> pure (Jr True)
+    0x20 -> Jr . not <$> use (cpu.register.zero)
+    0x28 -> Jr <$> use (cpu.register.zero)
 
-        0x11 -> Store16 (cpu.register.de) <$> consumeWord
-        0x21 -> Store16 (cpu.register.hl) <$> consumeWord
+    0x11 -> Store16 (cpu.register.de) <$> consumeWord
+    0x21 -> Store16 (cpu.register.hl) <$> consumeWord
 
-        0x2F -> pure Cpl
+    0x2F -> pure Cpl
 
-        0x30 -> Jr . not <$> use (cpu.register.carry)
-        0x38 -> Jr <$> use (cpu.register.carry)
+    0x30 -> Jr . not <$> use (cpu.register.carry)
+    0x38 -> Jr <$> use (cpu.register.carry)
 
-        0x77 -> do
-            nn <- use (cpu.register.hl)
-            pure $ Ld (Address $ addr nn) (Register $ register.a)
+    0x77 -> do
+        nn <- use (cpu.register.hl)
+        pure $ Ld (Address $ addr nn) (Register $ register.a)
 
-        i | i .&. 0xF8 == 0xA0 -> And . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xB0 -> Or . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xB8 -> Cmp . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0xA0 -> And . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0xB0 -> Or . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0xB8 -> Cmp . toArgument 0 i <$> use cpu
 
-        0xC0 -> pure $ Ret (Just NZ)
-        0xC8 -> pure $ Ret (Just Z)
+    0xC0 -> pure $ Ret (Just NZ)
+    0xC8 -> pure $ Ret (Just Z)
 
-        0xC1 -> pure (Pop bc)
+    0xC1 -> pure (Pop bc)
 
-        0xC3 -> do
-            cpu.tclock += 16
-            Jmp <$> consumeWord
+    0xC3 -> do
+        cpu.tclock += 16
+        Jmp <$> consumeWord
 
-        0xC5 -> Push <$> use (cpu.register.bc)
-        0xC6 -> Add . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xC5 -> Push <$> use (cpu.register.bc)
+    0xC6 -> Add . Address . addr <$> (cpu.register.pc <<+= 1)
 
-        0xC9 -> do
-            cpu.tclock += 16
-            pure (Ret Nothing)
+    0xC9 -> do
+        cpu.tclock += 16
+        pure (Ret Nothing)
 
-        0xCA -> JmpC Z <$> consumeWord
+    0xCA -> JmpC Z <$> consumeWord
 
-        0xCB -> consumeByte >>= \case
+    0xCB -> consumeByte >>= \case
 
-            i | i .&. 0xF8 == 0x30 -> Swap . toArgument 0 i <$> use cpu
-            i | i .&. 0xF8 == 0x48 -> Bit 1 . toArgument 0 i <$> use cpu
-            i | i .&. 0xF8 == 0x78 -> Bit 7 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0x30 -> Swap . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0x48 -> Bit 1 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0x78 -> Bit 7 . toArgument 0 i <$> use cpu
 
-            i | i .&. 0xF8 == 0xC0 -> Set 0 . toArgument 0 i <$> use cpu
-            i | i .&. 0xF8 == 0xC8 -> Set 1 . toArgument 0 i <$> use cpu
-            i | i .&. 0xF8 == 0xD0 -> Set 2 . toArgument 0 i <$> use cpu
-            i | i .&. 0xF8 == 0xD8 -> Set 3 . toArgument 0 i <$> use cpu
-            i | i .&. 0xF8 == 0xE0 -> Set 4 . toArgument 0 i <$> use cpu
-            i | i .&. 0xF8 == 0xE8 -> Set 5 . toArgument 0 i <$> use cpu
-            i | i .&. 0xF8 == 0xF0 -> Set 6 . toArgument 0 i <$> use cpu
-            i | i .&. 0xF8 == 0xF8 -> Set 7 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xC0 -> Set 0 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xC8 -> Set 1 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xD0 -> Set 2 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xD8 -> Set 3 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xE0 -> Set 4 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xE8 -> Set 5 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xF0 -> Set 6 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xF8 -> Set 7 . toArgument 0 i <$> use cpu
 
-            arg -> error $ "Invalid CB argument: " ++ showHex arg ""
+        arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
-        0xCD -> do
-            cpu.tclock += 24
-            Call <$> consumeWord
+    0xCD -> do
+        cpu.tclock += 24
+        Call <$> consumeWord
 
-        0xCF -> pure $ Rst 0x08
+    0xCF -> pure $ Rst 0x08
 
-        0xD0 -> pure $ Ret (Just NC)
-        0xD1 -> pure (Pop de)
-        0xD5 -> Push <$> use (cpu.register.de)
-        0xD6 -> Sub . Address . addr <$> (cpu.register.pc <<+= 1)
-        0xDE -> Sbc . Address . addr <$> (cpu.register.pc <<+= 1)
-        0xDF -> pure $ Rst 0x18
+    0xD0 -> pure $ Ret (Just NC)
+    0xD1 -> pure (Pop de)
+    0xD5 -> Push <$> use (cpu.register.de)
+    0xD6 -> Sub . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xDE -> Sbc . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xDF -> pure $ Rst 0x18
 
-        0xE0 -> do
-            mcycle 1
-            v <- fromIntegral <$> consumeByte
-            pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.a)
+    0xE0 -> do
+        mcycle 1
+        v <- fromIntegral <$> consumeByte
+        pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.a)
 
-        0xE1 -> pure (Pop hl)
+    0xE1 -> pure (Pop hl)
 
-        0xE2 -> do
-            v <- fromIntegral <$> use (cpu.register.c)
-            pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.a)
+    0xE2 -> do
+        v <- fromIntegral <$> use (cpu.register.c)
+        pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.a)
 
-        0xE5 -> Push <$> use (cpu.register.hl)
-        0xE6 -> And . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xE5 -> Push <$> use (cpu.register.hl)
+    0xE6 -> And . Address . addr <$> (cpu.register.pc <<+= 1)
 
-        0xE9 -> do
-            cpu.tclock += 4
-            av <- use (cpu.register.hl)
-            pure (Jmp av)
+    0xE9 -> do
+        cpu.tclock += 4
+        av <- use (cpu.register.hl)
+        pure (Jmp av)
 
-        0xEA -> do
-            mcycle 2
-            v <- consumeWord
-            pure $ Ld (Address $ addr v) (Register $ register.a)
+    0xEA -> do
+        mcycle 2
+        v <- consumeWord
+        pure $ Ld (Address $ addr v) (Register $ register.a)
 
-        0xEF -> pure $ Rst 0x28
+    0xEF -> pure $ Rst 0x28
 
-        0xF0 -> do
-            mcycle 1
-            v <- fromIntegral <$> consumeByte
-            pure $ Ld (Register $ register.a) (Address $ addr (0xFF00 + v))
+    0xF0 -> do
+        mcycle 1
+        v <- fromIntegral <$> consumeByte
+        pure $ Ld (Register $ register.a) (Address $ addr (0xFF00 + v))
 
-        0xF1 -> pure PopAF
-        0xF3 -> pure DisableInterrupt
-        0xF5 -> Push <$> use (cpu.register.af)
-        0xF6 -> Or . Address . addr <$> (cpu.register.pc <<+= 1)
-        0xF8 -> StackStore <$> consumeByte
+    0xF1 -> pure PopAF
+    0xF3 -> pure DisableInterrupt
+    0xF5 -> Push <$> use (cpu.register.af)
+    0xF6 -> Or . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xF8 -> StackStore <$> consumeByte
 
-        0xFA -> do
-            mcycle 2
-            Ld (Register $ register.a) . Address . addr <$> consumeWord
+    0xFA -> do
+        mcycle 2
+        Ld (Register $ register.a) . Address . addr <$> consumeWord
 
-        0xFB -> pure EnableInterrupt
-        0xFE -> Cmp . Address . addr <$> (cpu.register.pc <<+= 1)
-        0xFF -> pure $ Rst 0x38
+    0xFB -> pure EnableInterrupt
+    0xFE -> Cmp . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xFF -> pure $ Rst 0x38
 
-        instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
+    instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
 toArgument :: Int -> Word8 -> Cpu -> Argument Word8
 toArgument i n s = case shiftR n i .&. 7 of
-        0 -> Register (register.b)
-        1 -> Register (register.c)
-        2 -> Register (register.d)
-        3 -> Register (register.e)
-        4 -> Register (register.h)
-        5 -> Register (register.l)
-        6 -> Address (addr (s^.register.hl))
-        7 -> Register (register.a)
-        _ -> error "Invalid instructionn argument"
+    0 -> Register (register.b)
+    1 -> Register (register.c)
+    2 -> Register (register.d)
+    3 -> Register (register.e)
+    4 -> Register (register.h)
+    5 -> Register (register.l)
+    6 -> Address (addr (s^.register.hl))
+    7 -> Register (register.a)
+    _ -> error "Invalid instructionn argument"
