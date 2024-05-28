@@ -15,9 +15,9 @@ import HaskBoy.BitOps
 import HaskBoy.Cpu
 import HaskBoy.Cpu.Instructions hiding (bit)
 import HaskBoy.Cpu.Instructions qualified as Instr
+
 import HaskBoy.Emulator
 import HaskBoy.Mmu
-
 import Numeric (showHex)
 
 data Instruction
@@ -42,20 +42,16 @@ data Instruction
     | Set !Int !(Argument Word8)
     | Cmp !(Argument Word8)
     | Jmp !Word16
-    | JmpC !Condition !Word16
+    | JmpC !(ALens' Registers Bool) !Word16
     | Jr !Bool
     | Push !Word16
     | Pop !(ALens' Registers Word16)
     | PopAF
     | Call !Word16
     | Rst !Word16
-    | Ret !(Maybe Condition)
+    | Ret !(Maybe (ALens' Registers Bool))
     | EnableInterrupt
     | DisableInterrupt
-
-data Condition
-    = Z | NZ
-    | C | NC
 
 data Argument a where
     Register :: (ALens' Cpu a) -> Argument a
@@ -75,19 +71,17 @@ execute :: Instruction -> State Emulator ()
 execute = \case
     Nop -> mcycle 1
 
-    Ld lhs rhs -> mcycle 1 >> case lhs of
-            Register lr -> do
-                case rhs of
-                    Register rr -> cpu.cloneLens lr <~ use (cpu.cloneLens rr)
-                    Address av -> do
-                        mcycle 1
-                        cpu.cloneLens lr <~ use (mmu.cloneLens av)
+    Ld lhs rhs -> do
+        mcycle 1
+        lls <- case lhs of
+            Register lr -> pure (cpu.lr)
+            Address v -> mcycle 1 >> pure (mmu.v)
 
-            Address v -> mcycle 1 >> case rhs of
-                    Register r -> mmu.cloneLens v <~ use (cpu.cloneLens r)
-                    Address av -> do
-                        mcycle 1
-                        mmu.cloneLens v <~ use (mmu.cloneLens av)
+        rls <- case rhs of
+            Register rr -> pure (cpu.cloneLens rr)
+            Address av -> mcycle 1 >> pure (mmu.cloneLens av)
+
+        cloneLens lls <~ use rls
 
     Store16 r v -> mcycle 3 >> cloneLens r .= v
 
@@ -167,7 +161,7 @@ execute = \case
 
     JmpC k w -> do
         mcycle 3
-        zoom cpu (condition k) >>=
+        use (cpu.register.cloneLens k) >>=
             flip when (mcycle 1 >> jmp w)
 
     Push v -> do
@@ -194,7 +188,7 @@ execute = \case
     Ret mk -> mcycle 2 >> case mk of
             Just k -> do
                 mcycle 3
-                zoom cpu (condition k) >>= flip when ret
+                use (cpu.register.cloneLens k) >>= flip when ret
 
             Nothing -> mcycle 2 >> ret
 
@@ -203,12 +197,6 @@ execute = \case
 
 mcycle :: Integer -> State Emulator ()
 mcycle v = cpu.tclock += (v * 4)
-
-condition :: Condition -> State Cpu Bool
-condition  C = use (register.carry)
-condition NC = not <$> use (register.carry)
-condition  Z = use (register.zero)
-condition NZ = not <$> use (register.zero)
 
 toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
@@ -305,8 +293,8 @@ toInstruction = \case
     i | i .&. 0xF8 == 0xB0 -> Or . toArgument 0 i <$> use cpu
     i | i .&. 0xF8 == 0xB8 -> Cmp . toArgument 0 i <$> use cpu
 
-    0xC0 -> pure $ Ret (Just NZ)
-    0xC8 -> pure $ Ret (Just Z)
+    0xC0 -> pure $ Ret . Just $ zero.lens not (const not)
+    0xC8 -> pure $ Ret (Just zero)
 
     0xC1 -> pure (Pop bc)
 
@@ -321,7 +309,7 @@ toInstruction = \case
         cpu.tclock += 16
         pure (Ret Nothing)
 
-    0xCA -> JmpC Z <$> consumeWord
+    0xCA -> JmpC (zero.lens not (const not)) <$> consumeWord
 
     0xCB -> consumeByte >>= \case
 
@@ -346,7 +334,7 @@ toInstruction = \case
 
     0xCF -> pure $ Rst 0x08
 
-    0xD0 -> pure $ Ret (Just NC)
+    0xD0 -> pure $ Ret . Just $ carry.lens not (const not)
     0xD1 -> pure (Pop de)
     0xD5 -> Push <$> use (cpu.register.de)
     0xD6 -> Sub . Address . addr <$> (cpu.register.pc <<+= 1)
