@@ -10,10 +10,11 @@ import Control.Monad.State.Strict
 
 import Data.Bits ((.&.), shiftR)
 import Data.Word (Word8, Word16)
-import HaskBoy.BitOps qualified as BOps
+import HaskBoy.BitOps
 
 import HaskBoy.Cpu
-import HaskBoy.Cpu.Instructions as Instr
+import HaskBoy.Cpu.Instructions hiding (bit)
+import HaskBoy.Cpu.Instructions qualified as Instr
 import HaskBoy.Emulator
 import HaskBoy.Mmu
 
@@ -59,6 +60,16 @@ data Condition
 data Argument a where
     Register :: (ALens' Cpu a) -> Argument a
     Address :: (ALens' Mmu a) -> Argument a
+
+handleInterrupts :: State Emulator ()
+handleInterrupts = do
+    iEnable <- use (mmu.cloneLens (addr 0xFFFF))
+    iflag <- use (mmu.cloneLens (addr 0xFF0F))
+
+    -- VBlank interrupt
+    when (iflag^.bit 0 && iEnable^.bit 0) $ do
+        cpu.register.pc .= 0x40
+        mmu.cloneLens (addr 0xFF0F).bit 0 .= False
 
 execute :: Instruction -> State Emulator ()
 execute = \case
@@ -125,7 +136,7 @@ execute = \case
 
     Sub bs -> mcycle 1 >> case bs of
         Register r -> sub (cpu.r)
-        Address av -> mcycle 1 >> sub (mmu. av)
+        Address av -> mcycle 1 >> sub (mmu.av)
 
     Sbc v -> mcycle 1 >> case v of
         Register r -> sbc =<< use (cpu.cloneLens r)
@@ -136,12 +147,12 @@ execute = \case
         Address av -> mcycle 2 >> swap (mmu.av)
 
     Bit n bs -> mcycle 2 >> case bs of
-        Register r -> bit n (cpu.r)
-        Address av -> mcycle 1 >> bit n (mmu.av)
+        Register r -> Instr.bit n (cpu.r)
+        Address av -> mcycle 1 >> Instr.bit n (mmu.av)
 
     Set n bs -> mcycle 2 >> case bs of
-        Register r -> cpu.cloneLens r.BOps.bit n .= True
-        Address av -> mcycle 2 >> mmu.cloneLens av.BOps.bit n .= True
+        Register r -> cpu.cloneLens r.bit n .= True
+        Address av -> mcycle 2 >> mmu.cloneLens av.bit n .= True
 
     Inc16 r -> do
         mcycle 2
