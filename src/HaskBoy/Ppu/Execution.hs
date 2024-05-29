@@ -116,9 +116,6 @@ ppuMode = lens _ppuMode $ \mem v ->
     where _ppuMode :: Mmu -> PpuMode
           _ppuMode mem = toEnum . fromIntegral $ (mem^?!ioreg.ix 0x41) .&. 3
 
-lcdStat :: Lens' Mmu Word8
-lcdStat = cloneLens $ raw 0xFF41
-
 scx, scy :: Lens' Mmu Word8
 scx = lens (^?!ioreg.ix 0x43) (\mem v -> mem&ioreg.ix 0x43 .~ v)
 scy = lens (^?!ioreg.ix 0x42) (\mem v -> mem&ioreg.ix 0x42 .~ v)
@@ -129,14 +126,10 @@ lyc = lens (^?!ioreg.ix 0x45) (\mem v -> mem&ioreg.ix 0x45 .~ v)
 ly :: Lens' Mmu Word8
 ly = cloneLens (raw 0xFF44)
 
-objEnable, objSize, bgTileData, winEnable, lcdEnable :: Lens' Mmu Bool
+objSize, bgTileData :: Lens' Mmu Bool
 
-objEnable = lens (^.lcdc.bit 1) (\mem v -> mem&lcdc.bit 1 .~ v)
 objSize = lens (^.lcdc.bit 2) (\mem v -> mem&lcdc.bit 2 .~ v)
-
 bgTileData = lens (^.lcdc.bit 4) (\mem v -> mem&lcdc.bit 4 .~ v)
-winEnable = lens (^.lcdc.bit 5) (\mem v -> mem&lcdc.bit 5 .~ v)
-lcdEnable = lens (^.lcdc.bit 7) (\mem v -> mem&lcdc.bit 7 .~ v)
 
 lcdc :: Lens' Mmu Word8
 lcdc = lens (^?!ioreg.ix 0x40) (\mem v -> mem&ioreg.ix 0x40 .~ v)
