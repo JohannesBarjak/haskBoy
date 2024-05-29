@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs      #-}
 
-module HaskBoy.Cpu.Execution (execute, toInstruction) where
+module HaskBoy.Cpu.Execution (execute, toInstruction, handleInterrupts) where
 
 import Control.Lens
 import Control.Monad (when)
@@ -57,15 +57,18 @@ data Argument a where
     Register :: (ALens' Cpu a) -> Argument a
     Address :: (ALens' Mmu a) -> Argument a
 
-handleInterrupts :: State Emulator ()
+handleInterrupts :: State Emulator Integer
 handleInterrupts = do
     iEnable <- use (mmu.cloneLens (addr 0xFFFF))
     iflag <- use (mmu.cloneLens (addr 0xFF0F))
 
     -- VBlank interrupt
-    when (iflag^.bit 0 && iEnable^.bit 0) $ do
+    if iflag^.bit 0 && iEnable^.bit 0 then do
+        pushStack =<< use (cpu.register.pc)
         cpu.register.pc .= 0x40
         mmu.cloneLens (addr 0xFF0F).bit 0 .= False
+        pure 4
+            else pure 0
 
 execute :: Instruction -> State Emulator ()
 execute = \case
