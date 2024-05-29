@@ -79,7 +79,7 @@ execute = \case
         whenAddress lhs $ const (mcycle 1)
         whenAddress rhs $ const (mcycle 1)
 
-        cloneLens (fromArgument lhs) <~ use (cloneLens $ fromArgument rhs)
+        fromArgument lhs <~ use (fromArgument rhs)
 
     Store16 r v -> mcycle 3 >> cloneLens r .= v
 
@@ -94,65 +94,77 @@ execute = \case
 
         cpu.register.hl .= p + fromIntegral v
 
-    Xor bs -> mcycle 1 >> case bs of
-            Register r -> xor =<< use (cpu.cloneLens r)
-            Address v -> mcycle 1 >> (xor =<< use (mmu.cloneLens v))
+    Xor arg -> do
+        mcycle 1
+        whenAddress arg $ const (mcycle 1)
+        xor =<< use (fromArgument arg)
 
-    Or bs -> mcycle 1 >> case bs of
-            Register r -> Instr.or (cpu.r)
-            Address v -> mcycle 1 >> Instr.or (mmu.v)
+    Or arg -> do
+        mcycle 1
+        whenAddress arg $ const (mcycle 1)
+        Instr.or (fromArgument arg)
 
     Cpl -> mcycle 1 >> cpl
 
-    And bs -> mcycle 1 >> case bs of
-            Register r -> Instr.and =<< use (cpu.cloneLens r)
-            Address v -> mcycle 1 >> (Instr.and =<< use (mmu.cloneLens v))
+    And arg -> do
+        mcycle 1
+        whenAddress arg $ const (mcycle 1)
+        Instr.and =<< use (fromArgument arg)
 
-    Inc bs -> mcycle 1 >> case bs of
-            Register r -> inc (cpu.r)
-            Address av -> mcycle 2 >> inc (mmu.av)
+    Inc arg -> do
+        mcycle 1
+        whenAddress arg $ const (mcycle 2)
+        inc (fromArgument arg)
 
-    Dec bs -> mcycle 1 >> case bs of
-            Register r -> dec (cpu.r)
-            Address av -> mcycle 2 >> dec (mmu.av)
+    Dec arg -> do
+        mcycle 1
+        whenAddress arg $ const (mcycle 2)
+        dec (fromArgument arg)
 
     Dec16 r -> do
         mcycle 2
         cpu.register.cloneLens r -= 1
 
-    Add bs -> mcycle 1 >> case bs of
-            Register r -> add =<< use (cpu.cloneLens r)
-            Address av -> mcycle 1 >> (add =<< use (mmu.cloneLens av))
+    Add arg -> do
+        mcycle 1
+        add =<< use (fromArgument arg)
+        whenAddress arg $ const (mcycle 1)
 
     Add16 v -> mcycle 2 >> add16 (cpu.register.v)
 
-    Sub bs -> mcycle 1 >> case bs of
-        Register r -> sub (cpu.r)
-        Address av -> mcycle 1 >> sub (mmu.av)
+    Sub arg -> do
+        mcycle 1
+        whenAddress arg $ const (mcycle 1)
+        sub (fromArgument arg)
 
-    Sbc v -> mcycle 1 >> case v of
-        Register r -> sbc =<< use (cpu.cloneLens r)
-        Address av -> mcycle 1 >> (sbc =<< use (mmu.cloneLens av))
+    Sbc arg -> do
+        mcycle 1
+        whenAddress arg $ const (mcycle 1)
+        sbc =<< use (fromArgument arg)
 
-    Swap bs -> mcycle 2 >> case bs of
-        Register r -> swap (cpu.r)
-        Address av -> mcycle 2 >> swap (mmu.av)
+    Swap arg -> do
+        mcycle 2
+        whenAddress arg $ const (mcycle 2)
+        swap (fromArgument arg)
 
-    Bit n bs -> mcycle 2 >> case bs of
-        Register r -> Instr.bit n (cpu.r)
-        Address av -> mcycle 1 >> Instr.bit n (mmu.av)
+    Bit n arg -> do
+        mcycle 2
+        whenAddress arg $ const (mcycle 1)
+        Instr.bit n (fromArgument arg)
 
-    Set n bs -> mcycle 2 >> case bs of
-        Register r -> cpu.cloneLens r.bit n .= True
-        Address av -> mcycle 2 >> mmu.cloneLens av.bit n .= True
+    Set n arg -> do
+        mcycle 2
+        whenAddress arg $ const (mcycle 2)
+        fromArgument arg.bit n .= True
 
     Inc16 r -> do
         mcycle 2
         cpu.register.cloneLens r += 1
 
-    Cmp bs -> mcycle 1 >> case bs of
-        Register r -> cmp (cpu.r)
-        Address av -> mcycle 1 >> cmp (mmu.av)
+    Cmp arg -> do
+        mcycle 1
+        whenAddress arg $ const (mcycle 1)
+        cmp (fromArgument arg)
 
     Jr v -> jr v
     Jmp v -> cpu.register.pc .= v
@@ -168,7 +180,7 @@ execute = \case
 
     Pop r -> do
         mcycle 3
-        cpu.register . cloneLens r <~ popStack
+        cpu.register.cloneLens r <~ popStack
 
     PopAF -> do
         mcycle 3
@@ -310,7 +322,6 @@ toInstruction = \case
     0xCA -> JmpC (zero.lens not (const not)) <$> consumeWord
 
     0xCB -> consumeByte >>= \case
-
         i | i .&. 0xF8 == 0x30 -> Swap . toArgument 0 i <$> use cpu
         i | i .&. 0xF8 == 0x48 -> Bit 1 . toArgument 0 i <$> use cpu
         i | i .&. 0xF8 == 0x78 -> Bit 7 . toArgument 0 i <$> use cpu
@@ -390,9 +401,9 @@ whenAddress :: Applicative f => Argument a -> (ALens' Mmu a -> f ()) -> f ()
 whenAddress (Address as) f = f as
 whenAddress _ _ = pure ()
 
-fromArgument :: Argument a -> ALens' Emulator a
-fromArgument (Register r) = cpu.r
-fromArgument (Address as) = mmu.as
+fromArgument :: Argument a -> Lens' Emulator a
+fromArgument (Register r) = cpu.cloneLens r
+fromArgument (Address as) = mmu.cloneLens as
 
 toArgument :: Int -> Word8 -> Cpu -> Argument Word8
 toArgument i n s = case shiftR n i .&. 7 of
