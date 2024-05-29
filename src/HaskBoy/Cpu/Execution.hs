@@ -95,30 +95,25 @@ execute = \case
         cpu.register.hl .= p + fromIntegral v
 
     Xor arg -> do
-        mcycle 1
-        whenAddress arg $ const (mcycle 1)
+        mcycle (argCost 1 2 arg)
         xor =<< use (fromArgument arg)
 
     Or arg -> do
-        mcycle 1
-        whenAddress arg $ const (mcycle 1)
+        mcycle (argCost 1 2 arg)
         Instr.or (fromArgument arg)
 
     Cpl -> mcycle 1 >> cpl
 
     And arg -> do
-        mcycle 1
-        whenAddress arg $ const (mcycle 1)
+        mcycle (argCost 1 2 arg)
         Instr.and =<< use (fromArgument arg)
 
     Inc arg -> do
-        mcycle 1
-        whenAddress arg $ const (mcycle 2)
+        mcycle (argCost 1 3 arg)
         inc (fromArgument arg)
 
     Dec arg -> do
-        mcycle 1
-        whenAddress arg $ const (mcycle 2)
+        mcycle (argCost 1 3 arg)
         dec (fromArgument arg)
 
     Dec16 r -> do
@@ -126,35 +121,29 @@ execute = \case
         cpu.register.cloneLens r -= 1
 
     Add arg -> do
-        mcycle 1
+        mcycle (argCost 1 2 arg)
         add =<< use (fromArgument arg)
-        whenAddress arg $ const (mcycle 1)
 
     Add16 v -> mcycle 2 >> add16 (cpu.register.v)
 
     Sub arg -> do
-        mcycle 1
-        whenAddress arg $ const (mcycle 1)
+        mcycle (argCost 1 2 arg)
         sub (fromArgument arg)
 
     Sbc arg -> do
-        mcycle 1
-        whenAddress arg $ const (mcycle 1)
+        mcycle (argCost 1 2 arg)
         sbc =<< use (fromArgument arg)
 
     Swap arg -> do
-        mcycle 2
-        whenAddress arg $ const (mcycle 2)
+        mcycle (argCost 2 4 arg)
         swap (fromArgument arg)
 
     Bit n arg -> do
-        mcycle 2
-        whenAddress arg $ const (mcycle 1)
+        mcycle (argCost 2 3 arg)
         Instr.bit n (fromArgument arg)
 
     Set n arg -> do
-        mcycle 2
-        whenAddress arg $ const (mcycle 2)
+        mcycle (argCost 2 4 arg)
         fromArgument arg.bit n .= True
 
     Inc16 r -> do
@@ -162,8 +151,7 @@ execute = \case
         cpu.register.cloneLens r += 1
 
     Cmp arg -> do
-        mcycle 1
-        whenAddress arg $ const (mcycle 1)
+        mcycle (argCost 1 2 arg)
         cmp (fromArgument arg)
 
     Jr v -> jr v
@@ -416,3 +404,7 @@ toArgument i n s = case shiftR n i .&. 7 of
     6 -> Address (addr (s^.register.hl))
     7 -> Register (register.a)
     _ -> error "Invalid instructionn argument"
+
+argCost :: Integer -> Integer -> Argument a -> Integer
+argCost rc _ (Register _) = rc
+argCost _ ac (Address  _) = ac
