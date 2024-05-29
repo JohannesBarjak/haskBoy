@@ -76,15 +76,10 @@ execute = \case
 
     Ld lhs rhs -> do
         mcycle 1
-        lls <- case lhs of
-            Register lr -> pure (cpu.lr)
-            Address v -> mcycle 1 >> pure (mmu.v)
+        whenAddress lhs $ const (mcycle 1)
+        whenAddress rhs $ const (mcycle 1)
 
-        rls <- case rhs of
-            Register rr -> pure (cpu.cloneLens rr)
-            Address av -> mcycle 1 >> pure (mmu.cloneLens av)
-
-        cloneLens lls <~ use rls
+        cloneLens (fromArgument lhs) <~ use (cloneLens $ fromArgument rhs)
 
     Store16 r v -> mcycle 3 >> cloneLens r .= v
 
@@ -390,6 +385,14 @@ toInstruction = \case
     0xFF -> pure $ Rst 0x38
 
     instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
+
+whenAddress :: Applicative f => Argument a -> (ALens' Mmu a -> f ()) -> f ()
+whenAddress (Address as) f = f as
+whenAddress _ _ = pure ()
+
+fromArgument :: Argument a -> ALens' Emulator a
+fromArgument (Register r) = cpu.r
+fromArgument (Address as) = mmu.as
 
 toArgument :: Int -> Word8 -> Cpu -> Argument Word8
 toArgument i n s = case shiftR n i .&. 7 of
