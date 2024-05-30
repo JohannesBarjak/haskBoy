@@ -1,4 +1,4 @@
-module HaskBoy.Emulator.Execution (cycleCpu) where
+module HaskBoy.Emulator.Execution (cycleEmulator) where
 
 import Control.Lens
 import Control.Monad (when)
@@ -12,8 +12,8 @@ import HaskBoy.Emulator
 import HaskBoy.Ppu
 import HaskBoy.Ppu.Execution
 
-cycleCpu :: Integer -> State Emulator ()
-cycleCpu cycles
+cycleEmulator :: Integer -> State Emulator ()
+cycleEmulator cycles
     = when (cycles > 0) $ do
         oldTime <- use (cpu.tclock)
         instr <- consumeByte
@@ -23,4 +23,4 @@ cycleCpu cycles
         ppu.clock .= newTime `quot` 8
         ppuCycle
 
-        cycleCpu (cycles - (newTime - oldTime))
+        cycleEmulator (cycles - (newTime - oldTime))

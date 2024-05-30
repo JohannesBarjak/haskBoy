@@ -66,7 +66,7 @@ emulatorLoop prevState cycles renderer texture = do
     start <- SDL.time
     void . mapM handleEvent =<< SDL.pollEvents
 
-    let (dp, nextState) = runState (cycleCpu cycles >> rawDisplay) prevState
+    let (dp, nextState) = runState (cycleEmulator cycles >> rawDisplay) prevState
     renderGbDisplay dp renderer texture
     end <- SDL.time
 

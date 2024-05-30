@@ -2,7 +2,12 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs      #-}
 
-module HaskBoy.Cpu.Execution (execute, toInstruction, handleInterrupts) where
+module HaskBoy.Cpu.Execution
+    ( cycleCpu
+    , execute
+    , toInstruction
+    , handleInterrupts
+    ) where
 
 import Control.Lens
 import Control.Monad (when)
@@ -56,6 +61,9 @@ data Instruction
 data Argument a where
     Register :: (ALens' Cpu a) -> Argument a
     Address :: (ALens' Mmu a) -> Argument a
+
+cycleCpu :: State Emulator Integer
+cycleCpu = undefined
 
 handleInterrupts :: State Emulator (Maybe Integer)
 handleInterrupts = do
