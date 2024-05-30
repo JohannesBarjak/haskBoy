@@ -57,18 +57,20 @@ data Argument a where
     Register :: (ALens' Cpu a) -> Argument a
     Address :: (ALens' Mmu a) -> Argument a
 
-handleInterrupts :: State Emulator Integer
+handleInterrupts :: State Emulator (Maybe Integer)
 handleInterrupts = do
     iEnable <- use (mmu.cloneLens (addr 0xFFFF))
     iflag <- use (mmu.cloneLens (addr 0xFF0F))
 
     -- VBlank interrupt
-    if iflag^.bit 0 && iEnable^.bit 0 then do
+    if iflag^.bit 0 && iEnable^.bit 0
+    then do
         pushStack =<< use (cpu.register.pc)
         cpu.register.pc .= 0x40
         mmu.cloneLens (addr 0xFF0F).bit 0 .= False
-        pure 4
-            else pure 0
+        pure (Just 4)
+
+    else pure Nothing
 
 execute :: Instruction -> State Emulator ()
 execute = \case
@@ -76,8 +78,8 @@ execute = \case
 
     Ld lhs rhs -> do
         mcycle 1
-        whenAddress lhs $ const (mcycle 1)
-        whenAddress rhs $ const (mcycle 1)
+        mcycle (argCost 0 1 lhs)
+        mcycle (argCost 0 1 rhs)
 
         fromArgument lhs <~ use (fromArgument rhs)
 
@@ -384,10 +386,6 @@ toInstruction = \case
     0xFF -> pure $ Rst 0x38
 
     instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
-
-whenAddress :: Applicative f => Argument a -> (ALens' Mmu a -> f ()) -> f ()
-whenAddress (Address as) f = f as
-whenAddress _ _ = pure ()
 
 fromArgument :: Argument a -> Lens' Emulator a
 fromArgument (Register r) = cpu.cloneLens r
