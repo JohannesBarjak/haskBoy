@@ -62,23 +62,23 @@ data Argument a where
     Register :: (ALens' Cpu a) -> Argument a
     Address :: (ALens' Mmu a) -> Argument a
 
-cycleCpu :: State Emulator Integer
-cycleCpu = undefined
+cycleCpu :: State Emulator ()
+cycleCpu = do
+    handleInterrupts
+    instr <- consumeByte
+    execute =<< toInstruction instr
 
-handleInterrupts :: State Emulator (Maybe Integer)
+handleInterrupts :: State Emulator ()
 handleInterrupts = do
     iEnable <- use (mmu.cloneLens (addr 0xFFFF))
     iflag <- use (mmu.cloneLens (addr 0xFF0F))
 
     -- VBlank interrupt
-    if iflag^.bit 0 && iEnable^.bit 0
-    then do
+    when (iflag^.bit 0 && iEnable^.bit 0) $ do
         pushStack =<< use (cpu.register.pc)
         cpu.register.pc .= 0x40
         mmu.cloneLens (addr 0xFF0F).bit 0 .= False
-        pure (Just 4)
-
-    else pure Nothing
+        mcycle 4
 
 execute :: Instruction -> State Emulator ()
 execute = \case
