@@ -1,8 +1,9 @@
 module HaskBoy.Emulator.Execution (cycleEmulator) where
 
 import Control.Lens
-import Control.Monad (when)
+import Control.Monad (when, void)
 import Control.Monad.State.Strict
+import Control.Monad.Trans.Maybe
 
 import HaskBoy.Cpu
 import HaskBoy.Cpu.Execution
@@ -19,6 +20,6 @@ cycleEmulator cycles
         newTime <- use (cpu.tclock)
 
         ppu.clock .= newTime `quot` 8
-        ppuCycle
+        void $ runMaybeT ppuCycle
 
         cycleEmulator (cycles - (newTime - oldTime))

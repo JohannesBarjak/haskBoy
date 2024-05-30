@@ -13,8 +13,9 @@ module HaskBoy.Ppu.Execution
     ) where
 
 import Control.Lens
-import Control.Monad (forM_, when, mfilter)
+import Control.Monad (forM_, when, mfilter, mzero)
 import Control.Monad.State.Strict
+import Control.Monad.Trans.Maybe
 
 import Data.Bits ((.&.), shiftR, (.|.))
 import Data.Bool (bool)
@@ -34,13 +35,23 @@ import HaskBoy.Emulator
 import HaskBoy.Mmu
 import HaskBoy.Ppu
 
-ppuCycle :: State Emulator ()
+ppuCycle :: MaybeT (State Emulator) ()
 ppuCycle = do
     ppuTime <- use (ppu.clock)
     prevMode <- use (mmu.ppuMode)
+    lineY <- use (mmu.ly)
 
-    let mode = mfilter (/= prevMode) . Just
-            $ case ppuTime `rem` 456 of
+    when (lineY > 143) $ do
+        mmu.ppuMode .= HBlank
+        when (prevMode /= HBlank) $ do
+            mmu.cloneLens (addr 0xFF0F).bit 0 .= True
+
+        when (ppuTime `rem` 456 == 0) $ do
+            mmu.ly += 1
+        mzero
+
+    let mode = mfilter (/= prevMode) $ do
+            pure $ case ppuTime `rem` 456 of
                 x | x >= 172 -> HBlank
                 x | x >= 80 -> VramRead
                 _ -> OamRead
@@ -55,14 +66,14 @@ ppuCycle = do
             when (lineY < 144) drawTiles
         _ -> pure ()
 
-drawTiles :: State Emulator ()
+drawTiles :: MonadState Emulator m => m ()
 drawTiles = do
     lineY <- fromIntegral <$> use (mmu.ly)
     ppu.display.ix lineY <~ bgScanline <$> use mmu
     drawSprites . spriteScan =<< use mmu
 
 -- TODO: Implement 40 sprite limit.
-drawSprites :: Seq (ObjAttr, Seq Pixel) -> State Emulator ()
+drawSprites :: MonadState Emulator m => Seq (ObjAttr, Seq Pixel) -> m ()
 drawSprites sprites = forM_ sprites $ \(obj, srow) -> do
     let writeSprite i v = fromMaybe v $
             S.lookup (i - fromIntegral (obj^.xPos) + 8) srow
