@@ -20,6 +20,6 @@ cycleEmulator cycles
         newTime <- use (cpu.tclock)
 
         ppu.clock .= newTime `quot` 8
-        void $ runMaybeT ppuCycle
+        void $ runMaybeT cyclePpu
 
         cycleEmulator (cycles - (newTime - oldTime))
