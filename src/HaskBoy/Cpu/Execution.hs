@@ -345,6 +345,7 @@ toInstruction = \case
     0xD1 -> pure (Pop de)
     0xD5 -> Push <$> use (cpu.register.de)
     0xD6 -> Sub . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xD8 -> pure $ Ret $ Just carry
     0xDE -> Sbc . Address . addr <$> (cpu.register.pc <<+= 1)
     0xDF -> pure $ Rst 0x18
 
