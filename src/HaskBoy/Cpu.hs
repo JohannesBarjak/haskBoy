@@ -12,6 +12,7 @@ module HaskBoy.Cpu
     , interruptEnable
     , tclock
     , twoCompl
+    , newCpu
     ) where
 
 import HaskBoy.BitOps
@@ -38,6 +39,20 @@ data Registers = Registers
 
 makeLenses ''Cpu
 makeLenses ''Registers
+
+newCpu :: Cpu
+newCpu = Cpu
+    { _register = Registers
+        { _af = 0x01B0
+        , _bc = 0x0013
+        , _de = 0x00D8
+        , _hl = 0x014D
+        , _pc = 0x0100
+        , _sp = 0xFFFE
+        }
+    , _interruptEnable = True
+    , _tclock = 0
+    }
 
 a, flag, b, c, d, e, h, l :: Lens' Registers Word8
 
