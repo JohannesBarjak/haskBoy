@@ -76,7 +76,7 @@ drawSprites sprites = forM_ sprites $ \(obj, srow) -> do
     ppu.display.ix (fromIntegral lineY) %= S.mapWithIndex writeSprite
 
 spriteScan :: Mmu -> Seq (ObjAttr, Seq Pixel)
-spriteScan mem = scanAttr <&> (,) <*> ((tileRow mem . ri) <*> ti)
+spriteScan mem = scanAttr <&> (,) <*> liftA2 (tileRow mem) ri ti
 
     where scanAttr = S.take 10 $ S.filter visibleY (mem^.oam)
           visibleY obj = inRange ((mem^.ly + 1 - size, mem^.ly)&both +~ 16) (obj^.yPos)
