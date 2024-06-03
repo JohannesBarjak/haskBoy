@@ -13,7 +13,7 @@ module HaskBoy.Ppu.Execution
     ) where
 
 import Control.Lens
-import Control.Monad (forM_, when, mfilter, mzero)
+import Control.Monad (forM_, when, guard)
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Maybe
 
@@ -37,27 +37,28 @@ import HaskBoy.Ppu
 
 cyclePpu :: MaybeT (State Emulator) ()
 cyclePpu = do
-    ppuTime <- use (ppu.clock)
-    prevMode <- use (mmu.ppuMode)
+    pclock <- use (ppu.clock)
+    pmode <- use (mmu.ppuMode)
 
-    mmu.ly .= fromIntegral ((ppuTime `quot` 456) `rem` 154)
+    mmu.ly .= fromIntegral ((pclock `quot` 456) `rem` 154)
     lineY <- use (mmu.ly)
 
-    when (lineY > 143) $ do
+    when (lineY == 144) $ do
         mmu.ppuMode .= VBlank
-        when (prevMode /= VBlank) $ mmu.cloneLens (addr 0xFF0F).bit 0 .= True
-        mzero
+        mmu.cloneLens (addr 0xFF0F).bit 0 .= True
+    guard (lineY < 144)
 
-    mode <- mfilter (/= prevMode) $
-            pure $ case ppuTime `rem` 456 of
-                x | x >= 172 -> HBlank
-                x | x >= 80 -> VramRead
-                _ -> OamRead
+    let mode = case pclock `rem` 456 of
+            x | x >= 172 -> HBlank
+            x | x >= 80 -> VramRead
+            _ -> OamRead
 
+    guard (mode /= pmode)
     mmu.ppuMode .= mode
 
     case mode of
-        VramRead -> when (lineY < 144) drawTiles
+        OamRead  -> pure ()
+        VramRead -> drawTiles
         _ -> pure ()
 
 drawTiles :: MonadState Emulator m => m ()
