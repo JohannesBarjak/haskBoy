@@ -46,20 +46,27 @@ cyclePpu = do
     when (lineY == 144) $ do
         mmu.ppuMode .= VBlank
         mmu.addr 0xFF0F .bit 0 .= True
-    guard (lineY < 144)
 
     let mode = case pclock `rem` 456 of
             x | x >= 172 -> HBlank
             x | x >= 80 -> VramRead
             _ -> OamRead
 
-    guard (mode /= pmode)
+    guard (lineY < 144 && mode /= pmode)
     mmu.ppuMode .= mode
 
     case mode of
-        OamRead  -> pure ()
+        OamRead -> do
+            lineCmp <- use (mmu.lyc)
+            when (lineY == lineCmp) lycUpdate
+
         VramRead -> drawTiles
         _ -> pure ()
+
+lycUpdate :: MonadState Emulator m => m ()
+lycUpdate = do
+    lycIE <- use (mmu.addr 0xFF41 .bit 6)
+    when lycIE $ mmu.addr 0xFF0F .bit 1 .= True
 
 drawTiles :: MonadState Emulator m => m ()
 drawTiles = do

@@ -80,6 +80,12 @@ handleInterrupts = do
         mmu.addr 0xFF0F .bit 0 .= False
         mcycle 4
 
+    when (iflag^.bit 1 && iEnable^.bit 1) $ do
+        pushStack =<< use (cpu.register.pc)
+        cpu.register.pc .= 0x48
+        mmu.addr 0xFF0F .bit 1 .= False
+        mcycle 4
+
 execute :: Instruction -> State Emulator ()
 execute = \case
     Nop -> mcycle 1
