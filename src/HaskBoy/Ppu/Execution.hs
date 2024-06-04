@@ -45,7 +45,7 @@ cyclePpu = do
 
     when (lineY == 144) $ do
         mmu.ppuMode .= VBlank
-        mmu.cloneLens (addr 0xFF0F).bit 0 .= True
+        mmu.addr 0xFF0F .bit 0 .= True
     guard (lineY < 144)
 
     let mode = case pclock `rem` 456 of
@@ -94,7 +94,7 @@ bgScanline mem
     & S.cycleTaking 160
 
     where bgTileMaps = let ta = 0x9800 + fromIntegral ti * 32 in
-            [mem^.cloneLens (addr i) | i <- [ta..ta + 32]]
+            [mem^.addr i | i <- [ta..ta + 32]]
 
           tileAddress idx = if mem^.bgTileData
             then 0x8000 + (fromIntegral idx * 16)
@@ -104,7 +104,7 @@ bgScanline mem
 
 tileRow :: Mmu -> Word8 -> Address -> Seq Pixel
 tileRow mem ri ta = let ra = ta + (fromIntegral ri * 2) in
-    buildRow (mem^.cloneLens (addr ra)) (mem^.cloneLens (addr $ ra + 1))
+    buildRow (mem^.addr ra) (mem^.addr (ra + 1))
 
     -- | Get a single tile row from a pair of bytes
     where buildRow :: Word8 -> Word8 -> Seq Pixel
@@ -130,12 +130,12 @@ lyc :: Lens' Mmu Word8
 lyc = lens (^?!ioreg.ix 0x45) (\mem v -> mem&ioreg.ix 0x45 .~ v)
 
 ly :: Lens' Mmu Word8
-ly = cloneLens (raw 0xFF44)
+ly = raw 0xFF44
 
 objSize, bgTileData :: Lens' Mmu Bool
 
-objSize = lens (^.lcdc.bit 2) (\mem v -> mem&lcdc.bit 2 .~ v)
-bgTileData = lens (^.lcdc.bit 4) (\mem v -> mem&lcdc.bit 4 .~ v)
+objSize = lcdc.bit 2
+bgTileData = lcdc.bit 4
 
 lcdc :: Lens' Mmu Word8
 lcdc = lens (^?!ioreg.ix 0x40) (\mem v -> mem&ioreg.ix 0x40 .~ v)

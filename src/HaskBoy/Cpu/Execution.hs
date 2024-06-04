@@ -70,14 +70,14 @@ cycleCpu = do
 
 handleInterrupts :: State Emulator ()
 handleInterrupts = do
-    iEnable <- use (mmu.cloneLens (addr 0xFFFF))
-    iflag <- use (mmu.cloneLens (addr 0xFF0F))
+    iEnable <- use (mmu.addr 0xFFFF)
+    iflag <- use (mmu.addr 0xFF0F)
 
     -- VBlank interrupt
     when (iflag^.bit 0 && iEnable^.bit 0) $ do
         pushStack =<< use (cpu.register.pc)
         cpu.register.pc .= 0x40
-        mmu.cloneLens (addr 0xFF0F).bit 0 .= False
+        mmu.addr 0xFF0F .bit 0 .= False
         mcycle 4
 
 execute :: Instruction -> State Emulator ()
@@ -221,9 +221,9 @@ toInstruction = \case
     i | i .&. 0xC7 == 0x04 -> Inc . toArgument 3 i <$> use cpu
     i | i .&. 0xC7 == 0x05 -> Dec . toArgument 3 i <$> use cpu
 
-    i | i .&. 0xC7 == 0x06 ->
-        Ld  . toArgument 3 i <$> use cpu
-           <*> fmap (Address . addr) (cpu.register.pc <<+= 1)
+    i | i .&. 0xC7 == 0x06 -> do
+        v <- cpu.register.pc <<+= 1
+        Ld  . toArgument 3 i <$> use cpu ?? Address (cloneLens $ addr v)
 
     0x09 -> pure $ Add16 bc
     0x0B -> pure (Dec16 bc)
@@ -276,8 +276,12 @@ toInstruction = \case
         nn <- use (cpu.register.de)
         pure $ Ld (Register $ register.a) (Address $ addr nn)
 
-    0x2A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<+= 1)
-    0x3A -> Ld (Register $ register.a) . Address . addr <$> (cpu.register.hl <<-= 1)
+    0x2A -> do
+        v <- cpu.register.hl <<+= 1
+        pure $ Ld (Register $ register.a) (Address (cloneLens $ addr v))
+    0x3A -> do
+        v <- cpu.register.hl <<-= 1
+        pure $ Ld (Register $ register.a) (Address (cloneLens $ addr v))
 
     i | i .&. 0xF8 == 0x80 -> Add . toArgument 0 i <$> use cpu
 
@@ -311,7 +315,9 @@ toInstruction = \case
         Jmp <$> consumeWord
 
     0xC5 -> Push <$> use (cpu.register.bc)
-    0xC6 -> Add . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xC6 -> do
+        v <- cpu.register.pc <<+= 1
+        pure $ Add $ Address (cloneLens $ addr v)
 
     0xC9 -> do
         cpu.tclock += 16
@@ -344,9 +350,13 @@ toInstruction = \case
     0xD0 -> pure $ Ret . Just $ carry.lens not (const not)
     0xD1 -> pure (Pop de)
     0xD5 -> Push <$> use (cpu.register.de)
-    0xD6 -> Sub . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xD6 -> do
+        v <- cpu.register.pc <<+= 1
+        pure $ Sub $ Address (cloneLens $ addr v)
     0xD8 -> pure $ Ret $ Just carry
-    0xDE -> Sbc . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xDE -> do
+        v <- cpu.register.pc <<+= 1
+        pure $ Sbc $ Address (cloneLens $ addr v)
     0xDF -> pure $ Rst 0x18
 
     0xE0 -> do
@@ -361,7 +371,9 @@ toInstruction = \case
         pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.a)
 
     0xE5 -> Push <$> use (cpu.register.hl)
-    0xE6 -> And . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xE6 -> do
+        v <- cpu.register.pc <<+= 1
+        pure $ And $ Address (cloneLens $ addr v)
 
     0xE9 -> do
         cpu.tclock += 4
@@ -378,20 +390,25 @@ toInstruction = \case
     0xF0 -> do
         mcycle 1
         v <- fromIntegral <$> consumeByte
-        pure $ Ld (Register $ register.a) (Address $ addr (0xFF00 + v))
+        pure $ Ld (Register $ register.a) (Address $ cloneLens $ addr (0xFF00 + v))
 
     0xF1 -> pure PopAF
     0xF3 -> pure DisableInterrupt
     0xF5 -> Push <$> use (cpu.register.af)
-    0xF6 -> Or . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xF6 -> do
+        v <- cpu.register.pc <<+= 1
+        pure $ Or $ Address (cloneLens $ addr v)
     0xF8 -> StackStore <$> consumeByte
 
     0xFA -> do
         mcycle 2
-        Ld (Register $ register.a) . Address . addr <$> consumeWord
+        v <- consumeWord
+        pure $ Ld (Register $ register.a) $ Address (cloneLens $ addr v)
 
     0xFB -> pure EnableInterrupt
-    0xFE -> Cmp . Address . addr <$> (cpu.register.pc <<+= 1)
+    0xFE -> do
+        v <- cpu.register.pc <<+= 1
+        pure $ Cmp $ Address (cloneLens $ addr v)
     0xFF -> pure $ Rst 0x38
 
     instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""

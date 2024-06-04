@@ -65,10 +65,10 @@ toMemory xs = do
         else Nothing
 
 -- | Restricted access to the 'Mmu'
-addr :: Address -> ALens' Mmu Word8
+addr :: Address -> Lens' Mmu Word8
 addr i = lens (readByte i) (flip $ writeByte i)
 
-raw :: Address -> ALens' Mmu Word8
+raw :: Address -> Lens' Mmu Word8
 raw i = lens readMmu writeMmu
     where readMmu mem
             | inRange (0x0000, 0x7FFF) i = mem^?!rom.ix (fromIntegral i)
