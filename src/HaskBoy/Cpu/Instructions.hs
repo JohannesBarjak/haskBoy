@@ -79,56 +79,57 @@ jmp nn = pc .= nn
 ret :: State Emulator ()
 ret = jmp =<< popStack
 
-sbc :: Word8 -> State Emulator ()
+sbc :: (MonadState s m, HasRegisters s) => Word8 -> m ()
 sbc n = do
-    a <- use (cpu.register.af.upperByte)
-    carry' <- use (cpu.register.carry)
-    let result = a - n + fromBool carry'
+    a <- use (af.upperByte)
+    c <- use carry
 
-    cpu.register.zero .= (result == 0)
-    cpu.register.hcarry .= (a .&. 0xF < (n .&. 0xF) + fromBool carry')
-    cpu.register.carry .= (fromIntegral a < (fromIntegral n + fromBool carry' :: Int))
-    cpu.register.subOp .= True
+    let result = a - n + fromBool c
 
-    cpu.register.af.upperByte .= result
+    zero .= (result == 0)
+    hcarry .= (a .&. 0xF < (n .&. 0xF) + fromBool c)
+    carry .= (fromIntegral a < (fromIntegral n + fromBool c :: Int))
+    subOp .= True
 
-add :: Word8 -> State Emulator ()
+    af.upperByte .= result
+
+add :: (MonadState s m, HasRegisters s) => Word8 -> m ()
 add n = do
-    a <- use (cpu.register.af.upperByte)
+    a <- use (af.upperByte)
     let result = a + n
 
-    cpu.register.zero .= (result == 0)
-    cpu.register.hcarry .= ((a .&. 0xF) + (n .&. 0xF) > 0xF)
-    cpu.register.carry .= (toInteger a + toInteger n > 0xFF)
-    cpu.register.subOp .= False
+    zero .= (result == 0)
+    hcarry .= ((a .&. 0xF) + (n .&. 0xF) > 0xF)
+    carry .= (toInteger a + toInteger n > 0xFF)
+    subOp .= False
 
-    cpu.register.af.upperByte .= result
+    af.upperByte .= result
 
-add16 :: ALens' Emulator Word16 -> State Emulator ()
+add16 :: (MonadState s m, HasRegisters s) => ALens' s Word16 -> m ()
 add16 wl = do
-    v <- use (cpu.register.hl)
+    v <- use hl
     w <- use (cloneLens wl)
 
-    cpu.register.hcarry .= ((v .&. 0x07FF) + (w .&. 0x07FF) > 0x07FF)
-    cpu.register.carry .= (v > 0xFFFF - w)
-    cpu.register.subOp .= False
+    hcarry .= ((v .&. 0x07FF) + (w .&. 0x07FF) > 0x07FF)
+    carry .= (v > 0xFFFF - w)
+    subOp .= False
 
-    cpu.register.hl .= v + w
+    hl .= v + w
 
-sub :: ALens' Emulator Word8 -> State Emulator ()
+sub :: (MonadState s m, HasRegisters s) => ALens' s Word8 -> m ()
 sub n = do
     -- Subtraction in the Gameboy sets flags in the same way as comparison
     cmp n
     v <- use (cloneLens n)
-    cpu.register.af.upperByte -= v
+    af.upperByte -= v
 
-bit :: Int -> ALens' Emulator Word8 -> State Emulator ()
+bit :: (MonadState s m, HasRegisters s) => Int -> ALens' s Word8 -> m ()
 bit n r = do
     v <- use (cloneLens r)
 
-    cpu.register.zero .= (v .&. shiftL 1 n == 0)
-    cpu.register.hcarry .= True
-    cpu.register.subOp .= False
+    zero .= (v .&. shiftL 1 n == 0)
+    hcarry .= True
+    subOp .= False
 
 rl :: (MonadState s m, HasRegisters s) => Lens' s Word8 -> m ()
 rl r = do
