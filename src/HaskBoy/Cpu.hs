@@ -3,14 +3,12 @@
 {-# LANGUAGE GADTs           #-}
 
 module HaskBoy.Cpu
-    ( Registers(..)
-    , af, bc, de, hl, sp, pc
-    , a, flag, b, c, d, e, h, l
+    ( Cpu(..)
+    , HasCpu(..)
+    , upperByte, lowerByte
     , zero, subOp, hcarry, carry
-    , Cpu(..)
-    , register
-    , interruptEnable
-    , tclock
+    , Registers(..)
+    , HasRegisters(..)
     , twoCompl
     , newCpu
     ) where
@@ -37,8 +35,8 @@ data Registers = Registers
     , _pc :: !Word16
     }
 
-makeLenses ''Cpu
-makeLenses ''Registers
+makeClassy ''Cpu
+makeClassy ''Registers
 
 newCpu :: Cpu
 newCpu = Cpu
@@ -54,39 +52,19 @@ newCpu = Cpu
     , _tclock = 0
     }
 
-a, flag, b, c, d, e, h, l :: Lens' Registers Word8
+upperByte :: Lens' Word16 Word8
+upperByte = lens (fromIntegral . (`shiftR` 8)) setUpperByte
+    where setUpperByte w v = (fromIntegral v `shiftL` 8) .|. (w .&. 0xFF)
 
-a = lens _a (\reg v -> reg&af %~ setUpperByte v)
-flag = lens _flag (\reg v -> reg&af %~ setLowerByte v)
-b = lens _b (\reg v -> reg&bc %~ setUpperByte v)
-c = lens _c (\reg v -> reg&bc %~ setLowerByte v)
-d = lens _d (\reg v -> reg&de %~ setUpperByte v)
-e = lens _e (\reg v -> reg&de %~ setLowerByte v)
-h = lens _h (\reg v -> reg&hl %~ setUpperByte v)
-l = lens _l (\reg v -> reg&hl %~ setLowerByte v)
-
-_a ,_flag ,_b ,_c ,_d ,_e ,_h ,_l :: Registers -> Word8
-
-_a Registers{_af} = fromIntegral $ _af `shiftR` 8
-_flag Registers{_af} = fromIntegral $ _af .&. 0x00FF
-_b Registers{_bc} = fromIntegral $ _bc `shiftR` 8
-_c Registers{_bc} = fromIntegral $ _bc .&. 0x00FF
-_d Registers{_de} = fromIntegral $ _de `shiftR` 8
-_e Registers{_de} = fromIntegral $ _de .&. 0x00FF
-_h Registers{_hl} = fromIntegral $ _hl `shiftR` 8
-_l Registers{_hl} = fromIntegral $ _hl .&. 0x00FF
-
-setUpperByte :: Word8 -> Word16 -> Word16
-setUpperByte v w = (fromIntegral v `shiftL` 8) .|. (w .&. 0xFF)
-
-setLowerByte :: Word8 -> Word16 -> Word16
-setLowerByte v w = fromIntegral v .|. (w .&. 0xFF00)
+lowerByte :: Lens' Word16 Word8
+lowerByte = lens (fromIntegral . (.&. 0x00FF)) setLowerByte
+    where setLowerByte w v = fromIntegral v .|. (w .&. 0xFF00)
 
 zero ,subOp ,hcarry ,carry :: Lens' Registers Bool
-zero = flag.bit 7
-subOp = flag.bit 6
-hcarry = flag.bit 5
-carry = flag.bit 4
+zero = af.lowerByte.bit 7
+subOp = af.lowerByte.bit 6
+hcarry = af.lowerByte.bit 5
+carry = af.lowerByte.bit 4
 
 -- | Convert byte into a signed 'Int' using two's complement
 twoCompl :: Word8 -> Int

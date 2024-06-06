@@ -25,16 +25,16 @@ import HaskBoy.Mmu
 
 import Prelude hiding (and, or)
 
-inc :: ALens' Emulator Word8 -> State Emulator ()
+inc :: (MonadState s m, HasCpu s) => ALens' s Word8 -> m ()
 inc r = do
     v <- use (cloneLens r)
     let result = v + 1
 
-    cpu.register.zero .= (result == 0)
-    cpu.register.hcarry .= (v .&. 0xF == 0xF)
-    cpu.register.subOp .= False
+    register.zero .= (result == 0)
+    register.hcarry .= (v .&. 0xF == 0xF)
+    register.subOp .= False
 
-    cloneLens r .= result
+    r #= result
 
 dec :: ALens' Emulator Word8 -> State Emulator ()
 dec r = do
@@ -60,12 +60,12 @@ jr jump = do
 
 cmp :: ALens' Emulator Word8 -> State Emulator ()
 cmp r = do
-    a' <- use (cpu.register.a)
+    a <- use (cpu.register.af.upperByte)
     n <- use (cloneLens r)
 
-    cpu.register.zero .= (a' == n)
-    cpu.register.carry .= (a' < n)
-    cpu.register.hcarry .= (a' .&. 0xF < n .&. 0xF)
+    cpu.register.zero .= (a == n)
+    cpu.register.carry .= (a < n)
+    cpu.register.hcarry .= (a .&. 0xF < n .&. 0xF)
     cpu.register.subOp .= True
 
 call :: Address -> State Emulator ()
@@ -81,28 +81,28 @@ ret = jmp =<< popStack
 
 sbc :: Word8 -> State Emulator ()
 sbc n = do
-    a' <- use (cpu.register.a)
+    a <- use (cpu.register.af.upperByte)
     carry' <- use (cpu.register.carry)
-    let result = a' - n + fromBool carry'
+    let result = a - n + fromBool carry'
 
     cpu.register.zero .= (result == 0)
-    cpu.register.hcarry .= (a' .&. 0xF < (n .&. 0xF) + fromBool carry')
-    cpu.register.carry .= (fromIntegral a' < (fromIntegral n + fromBool carry' :: Int))
+    cpu.register.hcarry .= (a .&. 0xF < (n .&. 0xF) + fromBool carry')
+    cpu.register.carry .= (fromIntegral a < (fromIntegral n + fromBool carry' :: Int))
     cpu.register.subOp .= True
 
-    cpu.register.a .= result
+    cpu.register.af.upperByte .= result
 
 add :: Word8 -> State Emulator ()
 add n = do
-    a' <- use (cpu.register.a)
-    let result = a' + n
+    a <- use (cpu.register.af.upperByte)
+    let result = a + n
 
     cpu.register.zero .= (result == 0)
-    cpu.register.hcarry .= ((a' .&. 0xF) + (n .&. 0xF) > 0xF)
-    cpu.register.carry .= (toInteger a' + toInteger n > 0xFF)
+    cpu.register.hcarry .= ((a .&. 0xF) + (n .&. 0xF) > 0xF)
+    cpu.register.carry .= (toInteger a + toInteger n > 0xFF)
     cpu.register.subOp .= False
 
-    cpu.register.a .= result
+    cpu.register.af.upperByte .= result
 
 add16 :: ALens' Emulator Word16 -> State Emulator ()
 add16 wl = do
@@ -120,7 +120,7 @@ sub n = do
     -- Subtraction in the Gameboy sets flags in the same way as comparison
     cmp n
     v <- use (cloneLens n)
-    cpu.register.a -= v
+    cpu.register.af.upperByte -= v
 
 bit :: Int -> ALens' Emulator Word8 -> State Emulator ()
 bit n r = do
@@ -163,44 +163,44 @@ swap r = do
 
 or :: ALens' Emulator Word8 -> State Emulator ()
 or vl = do
-    a' <- use (cpu.register.a)
+    a <- use (cpu.register.af.upperByte)
     n <- use (cloneLens vl)
-    let result = a' .|. n
+    let result = a .|. n
 
     cpu.register.zero .= (result == 0)
     cpu.register.hcarry .= False
     cpu.register.carry .= False
     cpu.register.subOp .= False
 
-    cpu.register.a .= result
+    cpu.register.af.upperByte .= result
 
 xor :: Word8 -> State Emulator ()
 xor n = do
-    a' <- use (cpu.register.a)
-    let result = Bits.xor a' n
+    a <- use (cpu.register.af.upperByte)
+    let result = Bits.xor a n
 
     cpu.register.zero .= (result == 0)
     cpu.register.hcarry .= False
     cpu.register.carry .= False
     cpu.register.subOp .= False
 
-    cpu.register.a .= result
+    cpu.register.af.upperByte .= result
 
 and :: Word8 -> State Emulator ()
 and n = do
-    a' <- use (cpu.register.a)
-    let result = a' .&. n
+    a <- use (cpu.register.af.upperByte)
+    let result = a .&. n
 
     cpu.register.zero .= (result == 0)
     cpu.register.hcarry .= True
     cpu.register.carry .= False
     cpu.register.subOp .= False
 
-    cpu.register.a .= result
+    cpu.register.af.upperByte .= result
 
 cpl :: State Emulator ()
 cpl = do
-        cpu.register.a %= complement
+        cpu.register.af.upperByte %= complement
         cpu.register.hcarry .= True
         cpu.register.subOp .= True
 

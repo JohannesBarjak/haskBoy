@@ -2,11 +2,11 @@
 
 module HaskBoy.Ppu
     ( Ppu(..)
+    , HasPpu(..)
     , PpuMode(..)
     , Pixel(..)
     , Display
     , toPixel
-    , display, clock
     , newPpu
     ) where
 
@@ -34,7 +34,7 @@ data PpuMode
     | OamRead
     | VramRead deriving (Enum, Eq)
 
-makeLenses ''Ppu
+makeClassy ''Ppu
 
 newPpu :: Ppu
 newPpu = Ppu
