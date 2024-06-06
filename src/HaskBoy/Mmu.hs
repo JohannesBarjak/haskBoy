@@ -4,9 +4,9 @@
 module HaskBoy.Mmu
     ( Address
     , Mmu(..)
-    , rom, vram, eram, wram
-    , oam, ioreg, hram, ie
+    , HasMmu(..)
     , addr, addr16, raw
+    , mRead, mWrite
     , ObjAttr(..)
     , yPos, xPos, tlIdx
     , toMemory
@@ -45,7 +45,7 @@ data ObjAttr = ObjAttr
 
 type Address = Word16
 
-makeLenses ''Mmu
+makeClassy ''Mmu
 makeLenses ''ObjAttr
 
 toMemory :: [Word8] -> Maybe Mmu
@@ -65,8 +65,42 @@ toMemory xs = do
         else Nothing
 
 -- | Restricted access to the 'Mmu'
+{-# DEPRECATED addr "This function doesn't follow lens laws, it will be replaced by a setter and getter" #-}
 addr :: Address -> Lens' Mmu Word8
 addr i = lens (readByte i) (flip $ writeByte i)
+
+mRead :: HasMmu s => Address -> Getter s Word8
+mRead a = to writeMmu
+    where writeMmu mem
+            | inRange (0x0000, 0x7FFF) a = Seq.index (mem^.rom) (fromIntegral a)
+            | inRange (0x8000, 0x9FFF) a = Seq.index (mem^.vram) (fromIntegral a - 0x8000)
+            | inRange (0xA000, 0xBFFF) a = Seq.index (mem^.eram) (fromIntegral a - 0xA000)
+            | inRange (0xC000, 0xCFFF) a = Seq.index (mem^.wram) (fromIntegral a - 0xC000)
+            | inRange (0xD000, 0xDFFF) a = Seq.index (mem^.wram) (fromIntegral a - 0xC000)
+            | inRange (0xE000, 0xEFFF) a = Seq.index (mem^.wram) (fromIntegral a - 0xE000)
+            | inRange (0xF000, 0xFDFF) a = Seq.index (mem^.wram) (fromIntegral a - 0xE000)
+            | inRange (0xFE00, 0xFE9F) a = readOam (mem^.oam) (fromIntegral a - 0xFE00)
+            | inRange (0xFEA0, 0xFEFF) a = 0xFF
+            | inRange (0xFF00, 0xFF7F) a = Seq.index (mem^.ioreg) (fromIntegral a - 0xFF00)
+            | inRange (0xFF80, 0xFFFE) a = Seq.index (mem^.hram) (fromIntegral a - 0xFF80)
+            | otherwise                  = mem^.ie
+
+mWrite :: HasMmu s => Address -> Setter' s Word8
+mWrite a = sets writeMmu
+    where writeMmu f mem
+            | inRange (0x0000, 0x7FFF) a = mem
+            | inRange (0x8000, 0x9FFF) a = mem&vram .~ Seq.adjust' f (fromIntegral a - 0x8000) (mem^.vram)
+            | inRange (0xA000, 0xBFFF) a = mem&eram .~ Seq.adjust' f (fromIntegral a - 0xA000) (mem^.eram)
+            | inRange (0xC000, 0xCFFF) a = mem&wram .~ Seq.adjust' f (fromIntegral a - 0xC000) (mem^.wram)
+            | inRange (0xD000, 0xDFFF) a = mem&wram .~ Seq.adjust' f (fromIntegral a - 0xC000) (mem^.wram)
+            | inRange (0xE000, 0xEFFF) a = mem
+            | inRange (0xF000, 0xFDFF) a = mem
+            | inRange (0xFE00, 0xFE9F) a = let idx = fromIntegral a - 0xFE00 in
+                                            mem&oam .~ Seq.adjust' (adjustOam idx f) (idx `rem` 40) (mem^.oam)
+            | inRange (0xFEA0, 0xFEFF) a = mem
+            | inRange (0xFF00, 0xFF7F) a = mem&ioreg .~ Seq.adjust' f (fromIntegral a - 0xFF00) (mem^.ioreg)
+            | inRange (0xFF80, 0xFFFE) a = mem&hram .~ Seq.adjust' f (fromIntegral a - 0xFF80) (mem^.hram)
+            | otherwise                  = mem&ie %~ f
 
 raw :: Address -> Lens' Mmu Word8
 raw i = lens readMmu writeMmu
@@ -147,6 +181,16 @@ writeOam av v mem = case oai of
 
     where idx = fromIntegral $ av `rem` 40
           oai = av `rem` 4
+
+adjustOam :: Int -> (Word8 -> Word8) -> ObjAttr -> ObjAttr
+adjustOam a f obj = case oai of
+        0 -> obj&yPos %~ f
+        1 -> obj&xPos %~ f
+        2 -> obj&tlIdx %~ f
+        3 -> obj&objAttr %~ f
+        _ -> error "Invalid argument for writeOam"
+
+    where oai = a `rem` 4
 
 writeByte :: Address -> Word8 -> Mmu -> Mmu
 writeByte i v mem
