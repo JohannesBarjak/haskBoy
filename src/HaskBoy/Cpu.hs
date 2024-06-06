@@ -38,6 +38,9 @@ data Registers = Registers
 makeClassy ''Cpu
 makeClassy ''Registers
 
+instance HasRegisters Cpu where
+    registers = register
+
 newCpu :: Cpu
 newCpu = Cpu
     { _register = Registers
@@ -60,7 +63,7 @@ lowerByte :: Lens' Word16 Word8
 lowerByte = lens (fromIntegral . (.&. 0x00FF)) setLowerByte
     where setLowerByte w v = fromIntegral v .|. (w .&. 0xFF00)
 
-zero ,subOp ,hcarry ,carry :: Lens' Registers Bool
+zero ,subOp ,hcarry ,carry :: HasRegisters s =>  Lens' s Bool
 zero = af.lowerByte.bit 7
 subOp = af.lowerByte.bit 6
 hcarry = af.lowerByte.bit 5

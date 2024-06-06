@@ -75,14 +75,14 @@ handleInterrupts = do
 
     -- VBlank interrupt
     when (iflag^.bit 0 && iEnable^.bit 0) $ do
-        pushStack =<< use (cpu.register.pc)
-        cpu.register.pc .= 0x40
+        pushStack =<< use pc
+        jmp 0x40
         mmu.addr 0xFF0F .bit 0 .= False
         mcycle 4
 
     when (iflag^.bit 1 && iEnable^.bit 1) $ do
-        pushStack =<< use (cpu.register.pc)
-        cpu.register.pc .= 0x48
+        pushStack =<< use pc
+        jmp 0x48
         mmu.addr 0xFF0F .bit 1 .= False
         mcycle 4
 
@@ -134,13 +134,13 @@ execute = \case
 
     Dec16 r -> do
         mcycle 2
-        cpu.register.cloneLens r -= 1
+        register.cloneLens r -= 1
 
     Add arg -> do
         mcycle (argCost 1 2 arg)
         add =<< use (fromArgument arg)
 
-    Add16 v -> mcycle 2 >> add16 (cpu.register.v)
+    Add16 v -> mcycle 2 >> add16 (register.v)
 
     Sub arg -> do
         mcycle (argCost 1 2 arg)
@@ -164,18 +164,18 @@ execute = \case
 
     Inc16 r -> do
         mcycle 2
-        cpu.register.cloneLens r += 1
+        register.cloneLens r += 1
 
     Cmp arg -> do
         mcycle (argCost 1 2 arg)
         cmp (fromArgument arg)
 
     Jr v -> jr v
-    Jmp v -> cpu.register.pc .= v
+    Jmp v -> pc .= v
 
     JmpC k w -> do
         mcycle 3
-        use (cpu.register.cloneLens k) >>=
+        use (register.cloneLens k) >>=
             flip when (mcycle 1 >> jmp w)
 
     Push v -> do
@@ -184,13 +184,13 @@ execute = \case
 
     Pop r -> do
         mcycle 3
-        cpu.register.cloneLens r <~ popStack
+        register.cloneLens r <~ popStack
 
     PopAF -> do
         mcycle 3
-        v <- use (cpu.register.af.lowerByte)
-        cpu.register.af <~ popStack
-        cpu.register.af.lowerByte .= v
+        v <- use (af.lowerByte)
+        af <~ popStack
+        af.lowerByte .= v
 
     Call v -> call v
 
@@ -202,25 +202,25 @@ execute = \case
     Ret mk -> mcycle 2 >> case mk of
             Just k -> do
                 mcycle 3
-                use (cpu.register.cloneLens k) >>= flip when ret
+                use (register.cloneLens k) >>= flip when ret
 
             Nothing -> mcycle 2 >> ret
 
-    EnableInterrupt -> mcycle 1 >> cpu.interruptEnable .= True
-    DisableInterrupt -> mcycle 1 >> cpu.interruptEnable .= False
+    EnableInterrupt -> mcycle 1 >> interruptEnable .= True
+    DisableInterrupt -> mcycle 1 >> interruptEnable .= False
 
 mcycle :: Integer -> State Emulator ()
-mcycle v = cpu.tclock += (v * 4)
+mcycle v = tclock += (v * 4)
 
 toInstruction :: Word8 -> State Emulator Instruction
 toInstruction = \case
     0x00 -> pure Nop
 
-    0x01 -> Store16 (cpu.register.bc) <$> consumeWord
+    0x01 -> Store16 bc <$> consumeWord
 
     0x02 -> do
-        nn <- use (cpu.register.bc)
-        pure $ Ld (Address $ addr nn) (Register $ register.af.upperByte)
+        nn <- use bc
+        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
 
     0x03 -> pure (Inc16 bc)
 
@@ -228,7 +228,7 @@ toInstruction = \case
     i | i .&. 0xC7 == 0x05 -> Dec . toArgument 3 i <$> use cpu
 
     i | i .&. 0xC7 == 0x06 -> do
-        v <- cpu.register.pc <<+= 1
+        v <- pc <<+= 1
         Ld  . toArgument 3 i <$> use cpu ?? Address (cloneLens $ addr v)
 
     0x09 -> pure $ Add16 bc
@@ -243,69 +243,69 @@ toInstruction = \case
     0x39 -> pure $ Add16 sp
     0x3B -> pure (Dec16 sp)
 
-    i | i .&. 0xF8 == 0x40 -> Ld (Register $ register.bc.upperByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x48 -> Ld (Register $ register.bc.lowerByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x50 -> Ld (Register $ register.de.upperByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x58 -> Ld (Register $ register.de.lowerByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x60 -> Ld (Register $ register.hl.upperByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x68 -> Ld (Register $ register.hl.lowerByte) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x40 -> Ld (Register $ bc.upperByte) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x48 -> Ld (Register $ bc.lowerByte) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x50 -> Ld (Register $ de.upperByte) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x58 -> Ld (Register $ de.lowerByte) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x60 -> Ld (Register $ hl.upperByte) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x68 -> Ld (Register $ hl.lowerByte) . toArgument 0 i <$> use cpu
 
     i | i .&. 0xF8 == 0x70 -> do
-        v <- use (cpu.register.hl)
+        v <- use hl
         Ld (Address $ addr v) . toArgument 0 i <$> use cpu
 
-    i | i .&. 0xF8 == 0x78 -> Ld (Register $ register.af.upperByte) . toArgument 0 i <$> use cpu
+    i | i .&. 0xF8 == 0x78 -> Ld (Register $ af.upperByte) . toArgument 0 i <$> use cpu
 
     i | i .&. 0xF8 == 0x90 -> Sub . toArgument 0 i <$> use cpu
     i | i .&. 0xF8 == 0x98 -> Sbc . toArgument 0 i <$> use cpu
     i | i .&. 0xF8 == 0xA8 -> Xor . toArgument 0 i <$> use cpu
 
     0x12 -> do
-        nn <- use (cpu.register.de)
-        pure $ Ld (Address $ addr nn) (Register $ register.af.upperByte)
+        nn <- use de
+        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
 
     0x22 -> do
-        nn <- cpu.register.hl <<+= 1
-        pure $ Ld (Address $ addr nn) (Register $ register.af.upperByte)
+        nn <- hl <<+= 1
+        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
 
-    0x31 -> Store16 (cpu.register.sp) <$> consumeWord
+    0x31 -> Store16 sp <$> consumeWord
 
     0x32 -> do
-        nn <- cpu.register.hl <<-= 1
-        pure $ Ld (Address $ addr nn) (Register $ register.af.upperByte)
+        nn <- hl <<-= 1
+        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
 
     0x0A -> do
-        nn <- use (cpu.register.bc)
-        pure $ Ld (Register $ register.af.upperByte) (Address $ addr nn)
+        nn <- use bc
+        pure $ Ld (Register $ af.upperByte) (Address $ addr nn)
 
     0x1A -> do
-        nn <- use (cpu.register.de)
-        pure $ Ld (Register $ register.af.upperByte) (Address $ addr nn)
+        nn <- use de
+        pure $ Ld (Register $ af.upperByte) (Address $ addr nn)
 
     0x2A -> do
-        v <- cpu.register.hl <<+= 1
-        pure $ Ld (Register $ register.af.upperByte) (Address (cloneLens $ addr v))
+        v <- hl <<+= 1
+        pure $ Ld (Register $ af.upperByte) (Address (cloneLens $ addr v))
     0x3A -> do
-        v <- cpu.register.hl <<-= 1
-        pure $ Ld (Register $ register.af.upperByte) (Address (cloneLens $ addr v))
+        v <- hl <<-= 1
+        pure $ Ld (Register $ af.upperByte) (Address (cloneLens $ addr v))
 
     i | i .&. 0xF8 == 0x80 -> Add . toArgument 0 i <$> use cpu
 
     0x18 -> pure (Jr True)
-    0x20 -> Jr . not <$> use (cpu.register.zero)
-    0x28 -> Jr <$> use (cpu.register.zero)
+    0x20 -> Jr . not <$> use zero
+    0x28 -> Jr <$> use zero
 
-    0x11 -> Store16 (cpu.register.de) <$> consumeWord
-    0x21 -> Store16 (cpu.register.hl) <$> consumeWord
+    0x11 -> Store16 de <$> consumeWord
+    0x21 -> Store16 hl <$> consumeWord
 
     0x2F -> pure Cpl
 
-    0x30 -> Jr . not <$> use (cpu.register.carry)
-    0x38 -> Jr <$> use (cpu.register.carry)
+    0x30 -> Jr . not <$> use carry
+    0x38 -> Jr <$> use carry
 
     0x77 -> do
-        nn <- use (cpu.register.hl)
-        pure $ Ld (Address $ addr nn) (Register $ register.af.upperByte)
+        nn <- use hl
+        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
 
     i | i .&. 0xF8 == 0xA0 -> And . toArgument 0 i <$> use cpu
     i | i .&. 0xF8 == 0xB0 -> Or . toArgument 0 i <$> use cpu
@@ -317,16 +317,16 @@ toInstruction = \case
     0xC1 -> pure (Pop bc)
 
     0xC3 -> do
-        cpu.tclock += 16
+        tclock += 16
         Jmp <$> consumeWord
 
-    0xC5 -> Push <$> use (cpu.register.bc)
+    0xC5 -> Push <$> use bc
     0xC6 -> do
-        v <- cpu.register.pc <<+= 1
+        v <- pc <<+= 1
         pure $ Add $ Address (cloneLens $ addr v)
 
     0xC9 -> do
-        cpu.tclock += 16
+        tclock += 16
         pure (Ret Nothing)
 
     0xCA -> JmpC (zero.lens not (const not)) <$> consumeWord
@@ -348,72 +348,72 @@ toInstruction = \case
         arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
     0xCD -> do
-        cpu.tclock += 24
+        tclock += 24
         Call <$> consumeWord
 
     0xCF -> pure $ Rst 0x08
 
     0xD0 -> pure $ Ret . Just $ carry.lens not (const not)
     0xD1 -> pure (Pop de)
-    0xD5 -> Push <$> use (cpu.register.de)
+    0xD5 -> Push <$> use de
     0xD6 -> do
-        v <- cpu.register.pc <<+= 1
+        v <- pc <<+= 1
         pure $ Sub $ Address (cloneLens $ addr v)
     0xD8 -> pure $ Ret $ Just carry
     0xDE -> do
-        v <- cpu.register.pc <<+= 1
+        v <- pc <<+= 1
         pure $ Sbc $ Address (cloneLens $ addr v)
     0xDF -> pure $ Rst 0x18
 
     0xE0 -> do
         mcycle 1
         v <- fromIntegral <$> consumeByte
-        pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.af.upperByte)
+        pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ af.upperByte)
 
     0xE1 -> pure (Pop hl)
 
     0xE2 -> do
-        v <- fromIntegral <$> use (cpu.register.bc.lowerByte)
-        pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ register.af.upperByte)
+        v <- fromIntegral <$> use (bc.lowerByte)
+        pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ af.upperByte)
 
-    0xE5 -> Push <$> use (cpu.register.hl)
+    0xE5 -> Push <$> use hl
     0xE6 -> do
-        v <- cpu.register.pc <<+= 1
+        v <- pc <<+= 1
         pure $ And $ Address (cloneLens $ addr v)
 
     0xE9 -> do
-        cpu.tclock += 4
-        av <- use (cpu.register.hl)
+        tclock += 4
+        av <- use hl
         pure (Jmp av)
 
     0xEA -> do
         mcycle 2
         v <- consumeWord
-        pure $ Ld (Address $ addr v) (Register $ register.af.upperByte)
+        pure $ Ld (Address $ addr v) (Register $ af.upperByte)
 
     0xEF -> pure $ Rst 0x28
 
     0xF0 -> do
         mcycle 1
         v <- fromIntegral <$> consumeByte
-        pure $ Ld (Register $ register.af.upperByte) (Address $ cloneLens $ addr (0xFF00 + v))
+        pure $ Ld (Register $ af.upperByte) (Address $ cloneLens $ addr (0xFF00 + v))
 
     0xF1 -> pure PopAF
     0xF3 -> pure DisableInterrupt
-    0xF5 -> Push <$> use (cpu.register.af)
+    0xF5 -> Push <$> use af
     0xF6 -> do
-        v <- cpu.register.pc <<+= 1
+        v <- pc <<+= 1
         pure $ Or $ Address (cloneLens $ addr v)
     0xF8 -> StackStore <$> consumeByte
 
     0xFA -> do
         mcycle 2
         v <- consumeWord
-        pure $ Ld (Register $ register.af.upperByte) $ Address (cloneLens $ addr v)
+        pure $ Ld (Register $ af.upperByte) $ Address (cloneLens $ addr v)
 
     0xFB -> pure EnableInterrupt
     0xFE -> do
-        v <- cpu.register.pc <<+= 1
+        v <- pc <<+= 1
         pure $ Cmp $ Address (cloneLens $ addr v)
     0xFF -> pure $ Rst 0x38
 
@@ -425,14 +425,14 @@ fromArgument (Address as) = mmu.cloneLens as
 
 toArgument :: Int -> Word8 -> Cpu -> Argument Word8
 toArgument i n s = case shiftR n i .&. 7 of
-    0 -> Register (register.bc.upperByte)
-    1 -> Register (register.bc.lowerByte)
-    2 -> Register (register.de.upperByte)
-    3 -> Register (register.de.lowerByte)
-    4 -> Register (register.hl.upperByte)
-    5 -> Register (register.hl.lowerByte)
-    6 -> Address (addr (s^.register.hl))
-    7 -> Register (register.af.upperByte)
+    0 -> Register (bc.upperByte)
+    1 -> Register (bc.lowerByte)
+    2 -> Register (de.upperByte)
+    3 -> Register (de.lowerByte)
+    4 -> Register (hl.upperByte)
+    5 -> Register (hl.lowerByte)
+    6 -> Address (addr (s^.hl))
+    7 -> Register (af.upperByte)
     _ -> error "Invalid instructionn argument"
 
 argCost :: Integer -> Integer -> Argument a -> Integer

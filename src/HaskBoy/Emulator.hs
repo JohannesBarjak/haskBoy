@@ -5,7 +5,7 @@ module HaskBoy.Emulator where
 
 import Control.Lens
 
-import HaskBoy.Cpu (Cpu, HasCpu(..), newCpu)
+import HaskBoy.Cpu (Cpu, HasCpu(..), HasRegisters(..), newCpu)
 import HaskBoy.Mmu (Mmu)
 import HaskBoy.Ppu (Ppu, HasPpu(..), newPpu)
 
@@ -22,6 +22,9 @@ instance HasCpu Emulator where
 
 instance HasPpu Emulator where
     ppu = emulatorPpu
+
+instance HasRegisters Emulator where
+    registers = cpu.register
 
 initialEmulator :: Mmu -> Emulator
 initialEmulator _mmu = Emulator
