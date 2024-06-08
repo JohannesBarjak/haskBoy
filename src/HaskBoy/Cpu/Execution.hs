@@ -70,21 +70,20 @@ cycleCpu = do
 
 handleInterrupts :: State Emulator ()
 handleInterrupts = do
-    iEnable <- use (mmu.addr 0xFFFF)
-    iflag <- use (mmu.addr 0xFF0F)
-
     -- VBlank interrupt
-    when (iflag^.bit 0 && iEnable^.bit 0) $ do
-        pushStack =<< use pc
-        jmp 0x40
-        mmu.addr 0xFF0F .bit 0 .= False
-        mcycle 4
+    handleInterrupt 0 0x40
+    -- LCD Interrupt
+    handleInterrupt 1 0x48
 
-    when (iflag^.bit 1 && iEnable^.bit 1) $ do
-        pushStack =<< use pc
-        jmp 0x48
-        mmu.addr 0xFF0F .bit 1 .= False
-        mcycle 4
+  where handleInterrupt n a = do
+            iE <- use (readM 0xFFFF)
+            iF <- use (readM 0xFF0F)
+
+            when (iF^.bit n && iE^.bit n) $ do
+                pushStack =<< use pc
+                jmp a
+                writeM 0xFF0F .bit n .= False
+                mcycle 4
 
 execute :: Instruction -> State Emulator ()
 execute = \case
