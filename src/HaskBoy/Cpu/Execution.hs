@@ -69,11 +69,7 @@ cycleCpu = do
     execute =<< toInstruction instr
 
 handleInterrupts :: State Emulator ()
-handleInterrupts = do
-    -- VBlank interrupt
-    handleInterrupt 0 0x40
-    -- LCD Interrupt
-    handleInterrupt 1 0x48
+handleInterrupts = mapM_ (uncurry handleInterrupt) [(0,0x40), (1,0x48)]
 
   where handleInterrupt n a = do
             iE <- use (readM 0xFFFF)
