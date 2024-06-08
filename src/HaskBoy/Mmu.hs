@@ -6,7 +6,7 @@ module HaskBoy.Mmu
     , Mmu(..)
     , HasMmu(..)
     , addr, addr16, raw
-    , mRead, mWrite
+    , readM, writeM
     , ObjAttr(..)
     , yPos, xPos, tlIdx
     , toMemory
@@ -69,8 +69,8 @@ toMemory xs = do
 addr :: Address -> Lens' Mmu Word8
 addr i = lens (readByte i) (flip $ writeByte i)
 
-mRead :: HasMmu s => Address -> Getter s Word8
-mRead a = to writeMmu
+readM :: HasMmu s => Address -> Getter s Word8
+readM a = to writeMmu
     where writeMmu mem
             | inRange (0x0000, 0x7FFF) a = Seq.index (mem^.rom) (fromIntegral a)
             | inRange (0x8000, 0x9FFF) a = Seq.index (mem^.vram) (fromIntegral a - 0x8000)
@@ -85,8 +85,8 @@ mRead a = to writeMmu
             | inRange (0xFF80, 0xFFFE) a = Seq.index (mem^.hram) (fromIntegral a - 0xFF80)
             | otherwise                  = mem^.ie
 
-mWrite :: HasMmu s => Address -> Setter' s Word8
-mWrite a = sets writeMmu
+writeM :: HasMmu s => Address -> Setter' s Word8
+writeM a = sets writeMmu
     where writeMmu f mem
             | inRange (0x0000, 0x7FFF) a = mem
             | inRange (0x8000, 0x9FFF) a = mem&vram .~ Seq.adjust' f (fromIntegral a - 0x8000) (mem^.vram)
