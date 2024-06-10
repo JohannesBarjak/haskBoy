@@ -6,7 +6,7 @@ module HaskBoy.Cpu.Instructions
     , add, sub, sbc
     , add16
     , rl, bit, swap
-    , cpl
+    , res, cpl
     , consumeByte, consumeWord
     , popStack, pushStack
     ) where
@@ -130,6 +130,9 @@ bit n r = do
     zero .= (v .&. shiftL 1 n == 0)
     hcarry .= True
     subOp .= False
+
+res :: (MonadState s m, HasRegisters s, HasMmu s) => Int -> Lens' s Word8 -> m ()
+res n r = r %= (.&. (1 .<<. n))
 
 rl :: (MonadState s m, HasRegisters s) => Lens' s Word8 -> m ()
 rl r = do

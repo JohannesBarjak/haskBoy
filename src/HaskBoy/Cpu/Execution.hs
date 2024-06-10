@@ -44,6 +44,7 @@ data Instruction
     | Sbc !(Argument Word8)
     | Swap !(Argument Word8)
     | Bit !Int !(Argument Word8)
+    | Res !Int !(Argument Word8)
     | Set !Int !(Argument Word8)
     | Cmp !(Argument Word8)
     | Jmp !Word16
@@ -152,6 +153,10 @@ execute = \case
     Bit n arg -> do
         mcycle (argCost 2 3 arg)
         Instr.bit n (fromArgument arg)
+
+    Res n arg -> do
+        mcycle (argCost 2 4 arg)
+        res n (fromArgument arg)
 
     Set n arg -> do
         mcycle (argCost 2 4 arg)
@@ -330,6 +335,7 @@ toInstruction = \case
         i | i .&. 0xF8 == 0x30 -> Swap . toArgument 0 i <$> use cpu
         i | i .&. 0xF8 == 0x48 -> Bit 1 . toArgument 0 i <$> use cpu
         i | i .&. 0xF8 == 0x78 -> Bit 7 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0x80 -> Res 0 . toArgument 0 i <$> use cpu
 
         i | i .&. 0xF8 == 0xC0 -> Set 0 . toArgument 0 i <$> use cpu
         i | i .&. 0xF8 == 0xC8 -> Set 1 . toArgument 0 i <$> use cpu
