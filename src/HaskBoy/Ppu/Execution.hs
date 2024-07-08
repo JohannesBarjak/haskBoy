@@ -45,7 +45,7 @@ cyclePpu = do
 
     when (lineY == 144) $ do
         mmu.ppuMode .= VBlank
-        mmu.addr 0xFF0F .bit 0 .= True
+        mmu.writeM 0xFF0F .bit 0 .= True
 
     let mode = case pclock `rem` 456 of
             x | x >= 172 -> HBlank
@@ -65,8 +65,8 @@ cyclePpu = do
 
 lycUpdate :: MonadState Emulator m => m ()
 lycUpdate = do
-    lycIE <- use (mmu.addr 0xFF41 .bit 6)
-    when lycIE $ mmu.addr 0xFF0F .bit 1 .= True
+    lycIE <- use (mmu.readM 0xFF41 .bit 6)
+    when lycIE $ mmu.writeM 0xFF0F .bit 1 .= True
 
 drawTiles :: MonadState Emulator m => m ()
 drawTiles = do
@@ -76,7 +76,7 @@ drawTiles = do
 
 -- TODO: Implement 40 sprite limit.
 drawSprites :: MonadState Emulator m => Seq (ObjAttr, Seq Pixel) -> m ()
-drawSprites sprites = forM_ sprites $ \(obj, srow) -> do
+drawSprites sprites = forM_ sprites \(obj, srow) -> do
     let writeSprite i v = fromMaybe v $
             S.lookup (i - fromIntegral (obj^.xPos) + 8) srow
 
@@ -101,7 +101,7 @@ bgScanline mem
     & S.cycleTaking 160
 
     where bgTileMaps = let ta = 0x9800 + fromIntegral ti * 32 in
-            [mem^.addr i | i <- [ta..ta + 32]]
+            [mem^.readM i | i <- [ta..ta + 32]]
 
           tileAddress idx = if mem^.bgTileData
             then 0x8000 + (fromIntegral idx * 16)
@@ -111,7 +111,7 @@ bgScanline mem
 
 tileRow :: Mmu -> Word8 -> Address -> Seq Pixel
 tileRow mem ri ta = let ra = ta + (fromIntegral ri * 2) in
-    buildRow (mem^.addr ra) (mem^.addr (ra + 1))
+    buildRow (mem^.readM ra) (mem^.readM (ra + 1))
 
     -- | Get a single tile row from a pair of bytes
     where buildRow :: Word8 -> Word8 -> Seq Pixel
@@ -123,18 +123,18 @@ twoCompl b
     | otherwise = -(256 - fromIntegral b)
 
 ppuMode :: Lens' Mmu PpuMode
-ppuMode = lens _ppuMode $ \mem v ->
+ppuMode = lens _ppuMode \mem v ->
     mem&ioreg.ix 0x41 .~ ((mem^?!ioreg.ix 0x41) .&. 0xFC) .|. fromIntegral (fromEnum v)
 
     where _ppuMode :: Mmu -> PpuMode
           _ppuMode mem = toEnum . fromIntegral $ (mem^?!ioreg.ix 0x41) .&. 3
 
 scx, scy :: Lens' Mmu Word8
-scx = lens (^?!ioreg.ix 0x43) (\mem v -> mem&ioreg.ix 0x43 .~ v)
-scy = lens (^?!ioreg.ix 0x42) (\mem v -> mem&ioreg.ix 0x42 .~ v)
+scx = lens (^?!ioreg.ix 0x43) \mem v -> mem&ioreg.ix 0x43 .~ v
+scy = lens (^?!ioreg.ix 0x42) \mem v -> mem&ioreg.ix 0x42 .~ v
 
 lyc :: Lens' Mmu Word8
-lyc = lens (^?!ioreg.ix 0x45) (\mem v -> mem&ioreg.ix 0x45 .~ v)
+lyc = lens (^?!ioreg.ix 0x45) \mem v -> mem&ioreg.ix 0x45 .~ v
 
 ly :: Lens' Mmu Word8
 ly = raw 0xFF44
@@ -145,4 +145,4 @@ objSize = lcdc.bit 2
 bgTileData = lcdc.bit 4
 
 lcdc :: Lens' Mmu Word8
-lcdc = lens (^?!ioreg.ix 0x40) (\mem v -> mem&ioreg.ix 0x40 .~ v)
+lcdc = lens (^?!ioreg.ix 0x40) \mem v -> mem&ioreg.ix 0x40 .~ v
