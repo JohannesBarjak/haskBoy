@@ -4,7 +4,7 @@ ignore-project: False
 tests: True
 profiling: True
 profiling-detail: all-functions
-optimization: 1
+optimization: 2
 
 jobs: $ncpus
 

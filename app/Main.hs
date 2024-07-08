@@ -63,10 +63,10 @@ loadRom f = BS.unpack <$> BS.readFile f
 
 emulatorLoop :: Emulator -> Integer -> SDL.Renderer -> SDL.Texture -> IO ()
 emulatorLoop prevState cycles renderer texture = do
+    let (dp, nextState) = runState (cycleEmulator cycles >> rawDisplay) prevState
+
     start <- SDL.time
     void . mapM handleEvent =<< SDL.pollEvents
-
-    let (dp, nextState) = runState (cycleEmulator cycles >> rawDisplay) prevState
     renderGbDisplay dp renderer texture
     end <- SDL.time
 
