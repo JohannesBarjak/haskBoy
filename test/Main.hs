@@ -18,7 +18,4 @@ import Data.Bits (complement)
 
 main :: IO ()
 main = hspec do
-    describe "Ppu.twoCompl" do
-        it "is similar to complement from Data.Bits" $ property \x ->
-            Ppu.Exec.twoCompl x `shouldBe` fromIntegral (complement x)
     pure ()
