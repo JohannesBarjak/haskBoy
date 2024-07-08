@@ -118,9 +118,9 @@ tileRow mem ri ta = let ra = ta + (fromIntegral ri * 2) in
           buildRow v1 v2 = [on toPixel (toBool . (.&. 1) . (`shiftR` i)) v1 v2 | i <- [7,6..0]]
 
 twoCompl :: Word8 -> Int
-twoCompl r8
-    | r8 < 128  = fromIntegral r8
-    | otherwise = -(256 - fromIntegral r8)
+twoCompl b
+    |   b < 128 = fromIntegral b
+    | otherwise = -(256 - fromIntegral b)
 
 ppuMode :: Lens' Mmu PpuMode
 ppuMode = lens _ppuMode $ \mem v ->
