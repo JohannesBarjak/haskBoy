@@ -56,6 +56,7 @@ data Instruction
     | Call !Word16
     | Rst !Word16
     | Ret !(Maybe (ALens' Registers Bool))
+    | RetI
     | EnableInterrupt
     | DisableInterrupt
 
@@ -205,6 +206,11 @@ execute = \case
 
             Nothing -> mcycle 2 >> ret
 
+    RetI -> do
+        jmp =<< popStack
+        interruptEnable .= True
+        mcycle 1
+
     EnableInterrupt -> mcycle 1 >> interruptEnable .= True
     DisableInterrupt -> mcycle 1 >> interruptEnable .= False
 
@@ -231,16 +237,16 @@ getInstruction = consumeByte >>= \case
         Ld  . toArgument 3 i <$> use cpu ?? Address v
 
     0x09 -> pure $ Add16 bc
-    0x0B -> pure (Dec16 bc)
-    0x13 -> pure (Inc16 de)
+    0x0B -> pure $ Dec16 bc
+    0x13 -> pure $ Inc16 de
     0x19 -> pure $ Add16 de
-    0x1B -> pure (Dec16 de)
-    0x2B -> pure (Dec16 hl)
-    0x23 -> pure (Inc16 hl)
+    0x1B -> pure $ Dec16 de
+    0x2B -> pure $ Dec16 hl
+    0x23 -> pure $ Inc16 hl
     0x29 -> pure $ Add16 hl
-    0x33 -> pure (Inc16 sp)
+    0x33 -> pure $ Inc16 sp
     0x39 -> pure $ Add16 sp
-    0x3B -> pure (Dec16 sp)
+    0x3B -> pure $ Dec16 sp
 
     i | i .&. 0xF8 == 0x40 -> Ld (Register $ bc.upperByte) . toArgument 0 i <$> use cpu
     i | i .&. 0xF8 == 0x48 -> Ld (Register $ bc.lowerByte) . toArgument 0 i <$> use cpu
@@ -335,6 +341,12 @@ getInstruction = consumeByte >>= \case
         i | i .&. 0xF8 == 0x48 -> Bit 1 . toArgument 0 i <$> use cpu
         i | i .&. 0xF8 == 0x78 -> Bit 7 . toArgument 0 i <$> use cpu
         i | i .&. 0xF8 == 0x80 -> Res 0 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0x88 -> Res 1 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0x90 -> Res 2 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0x98 -> Res 3 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xA0 -> Res 4 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xA8 -> Res 5 . toArgument 0 i <$> use cpu
+        i | i .&. 0xF8 == 0xB0 -> Res 6 . toArgument 0 i <$> use cpu
 
         i | i .&. 0xF8 == 0xC0 -> Set 0 . toArgument 0 i <$> use cpu
         i | i .&. 0xF8 == 0xC8 -> Set 1 . toArgument 0 i <$> use cpu
@@ -360,6 +372,7 @@ getInstruction = consumeByte >>= \case
         v <- pc <<+= 1
         pure $ Sub (Address v)
     0xD8 -> pure $ Ret $ Just carry
+    0xD9 -> pure RetI
     0xDE -> do
         v <- pc <<+= 1
         pure $ Sbc (Address v)
