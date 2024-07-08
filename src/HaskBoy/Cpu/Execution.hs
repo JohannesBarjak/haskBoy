@@ -5,7 +5,7 @@
 module HaskBoy.Cpu.Execution
     ( cycleCpu
     , execute
-    , toInstruction
+    , getInstruction
     , handleInterrupts
     ) where
 
@@ -27,26 +27,26 @@ import Numeric (showHex)
 
 data Instruction
     = Nop
-    | Xor !(Argument Word8)
-    | Or !(Argument Word8)
+    | Xor Argument
+    | Or Argument
     | Cpl
-    | And !(Argument Word8)
-    | Ld !(Argument Word8) !(Argument Word8)
+    | And Argument
+    | Ld Argument Argument
     | Store16 !(ALens' Emulator Word16) !Word16
-    | Inc !(Argument Word8)
+    | Inc Argument
     | Inc16 !(ALens' Registers Word16)
-    | Dec !(Argument Word8)
+    | Dec Argument
     | Dec16 !(ALens' Registers Word16)
-    | Add !(Argument Word8)
+    | Add Argument
     | Add16 !(ALens' Registers Word16)
     | StackStore !Word8
-    | Sub !(Argument Word8)
-    | Sbc !(Argument Word8)
-    | Swap !(Argument Word8)
-    | Bit !Int !(Argument Word8)
-    | Res !Int !(Argument Word8)
-    | Set !Int !(Argument Word8)
-    | Cmp !(Argument Word8)
+    | Sub Argument
+    | Sbc Argument
+    | Swap Argument
+    | Bit !Int Argument
+    | Res !Int Argument
+    | Set !Int Argument
+    | Cmp Argument
     | Jmp !Word16
     | JmpC !(ALens' Registers Bool) !Word16
     | Jr !Bool
@@ -59,15 +59,14 @@ data Instruction
     | EnableInterrupt
     | DisableInterrupt
 
-data Argument a where
-    Register :: (ALens' Cpu a) -> Argument a
-    Address :: (ALens' Mmu a) -> Argument a
+data Argument where
+    Register :: (ALens' Cpu Word8) -> Argument
+    Address :: Word16 -> Argument
 
 cycleCpu :: State Emulator ()
 cycleCpu = do
     handleInterrupts
-    instr <- consumeByte
-    execute =<< toInstruction instr
+    execute =<< getInstruction
 
 handleInterrupts :: State Emulator ()
 handleInterrupts = mapM_ (uncurry handleInterrupt) [(0,0x40), (1,0x48)]
@@ -212,15 +211,15 @@ execute = \case
 mcycle :: Integer -> State Emulator ()
 mcycle v = tclock += (v * 4)
 
-toInstruction :: Word8 -> State Emulator Instruction
-toInstruction = \case
+getInstruction :: State Emulator Instruction
+getInstruction = consumeByte >>= \case
     0x00 -> pure Nop
 
     0x01 -> Store16 bc <$> consumeWord
 
     0x02 -> do
         nn <- use bc
-        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
+        pure $ Ld (Address nn) (Register $ af.upperByte)
 
     0x03 -> pure (Inc16 bc)
 
@@ -229,7 +228,7 @@ toInstruction = \case
 
     i | i .&. 0xC7 == 0x06 -> do
         v <- pc <<+= 1
-        Ld  . toArgument 3 i <$> use cpu ?? Address (cloneLens $ addr v)
+        Ld  . toArgument 3 i <$> use cpu ?? Address v
 
     0x09 -> pure $ Add16 bc
     0x0B -> pure (Dec16 bc)
@@ -252,7 +251,7 @@ toInstruction = \case
 
     i | i .&. 0xF8 == 0x70 -> do
         v <- use hl
-        Ld (Address $ addr v) . toArgument 0 i <$> use cpu
+        Ld (Address v) . toArgument 0 i <$> use cpu
 
     i | i .&. 0xF8 == 0x78 -> Ld (Register $ af.upperByte) . toArgument 0 i <$> use cpu
 
@@ -262,32 +261,32 @@ toInstruction = \case
 
     0x12 -> do
         nn <- use de
-        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
+        pure $ Ld (Address nn) (Register $ af.upperByte)
 
     0x22 -> do
         nn <- hl <<+= 1
-        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
+        pure $ Ld (Address nn) (Register $ af.upperByte)
 
     0x31 -> Store16 sp <$> consumeWord
 
     0x32 -> do
         nn <- hl <<-= 1
-        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
+        pure $ Ld (Address nn) (Register $ af.upperByte)
 
     0x0A -> do
         nn <- use bc
-        pure $ Ld (Register $ af.upperByte) (Address $ addr nn)
+        pure $ Ld (Register $ af.upperByte) (Address nn)
 
     0x1A -> do
         nn <- use de
-        pure $ Ld (Register $ af.upperByte) (Address $ addr nn)
+        pure $ Ld (Register $ af.upperByte) (Address nn)
 
     0x2A -> do
         v <- hl <<+= 1
-        pure $ Ld (Register $ af.upperByte) (Address (cloneLens $ addr v))
+        pure $ Ld (Register $ af.upperByte) (Address v)
     0x3A -> do
         v <- hl <<-= 1
-        pure $ Ld (Register $ af.upperByte) (Address (cloneLens $ addr v))
+        pure $ Ld (Register $ af.upperByte) (Address v)
 
     i | i .&. 0xF8 == 0x80 -> Add . toArgument 0 i <$> use cpu
 
@@ -305,7 +304,7 @@ toInstruction = \case
 
     0x77 -> do
         nn <- use hl
-        pure $ Ld (Address $ addr nn) (Register $ af.upperByte)
+        pure $ Ld (Address nn) (Register $ af.upperByte)
 
     i | i .&. 0xF8 == 0xA0 -> And . toArgument 0 i <$> use cpu
     i | i .&. 0xF8 == 0xB0 -> Or . toArgument 0 i <$> use cpu
@@ -323,7 +322,7 @@ toInstruction = \case
     0xC5 -> Push <$> use bc
     0xC6 -> do
         v <- pc <<+= 1
-        pure $ Add $ Address (cloneLens $ addr v)
+        pure $ Add (Address v)
 
     0xC9 -> do
         tclock += 16
@@ -359,28 +358,28 @@ toInstruction = \case
     0xD5 -> Push <$> use de
     0xD6 -> do
         v <- pc <<+= 1
-        pure $ Sub $ Address (cloneLens $ addr v)
+        pure $ Sub (Address v)
     0xD8 -> pure $ Ret $ Just carry
     0xDE -> do
         v <- pc <<+= 1
-        pure $ Sbc $ Address (cloneLens $ addr v)
+        pure $ Sbc (Address v)
     0xDF -> pure $ Rst 0x18
 
     0xE0 -> do
         mcycle 1
         v <- fromIntegral <$> consumeByte
-        pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ af.upperByte)
+        pure $ Ld (Address (0xFF00 + v)) (Register $ af.upperByte)
 
     0xE1 -> pure (Pop hl)
 
     0xE2 -> do
         v <- fromIntegral <$> use (bc.lowerByte)
-        pure $ Ld (Address $ addr (0xFF00 + v)) (Register $ af.upperByte)
+        pure $ Ld (Address (0xFF00 + v)) (Register $ af.upperByte)
 
     0xE5 -> Push <$> use hl
     0xE6 -> do
         v <- pc <<+= 1
-        pure $ And $ Address (cloneLens $ addr v)
+        pure $ And $ Address v
 
     0xE9 -> do
         tclock += 4
@@ -390,41 +389,40 @@ toInstruction = \case
     0xEA -> do
         mcycle 2
         v <- consumeWord
-        pure $ Ld (Address $ addr v) (Register $ af.upperByte)
+        pure $ Ld (Address v) (Register $ af.upperByte)
 
     0xEF -> pure $ Rst 0x28
 
     0xF0 -> do
         mcycle 1
         v <- fromIntegral <$> consumeByte
-        pure $ Ld (Register $ af.upperByte) (Address $ cloneLens $ addr (0xFF00 + v))
+        pure $ Ld (Register $ af.upperByte) (Address (0xFF00 + v))
 
     0xF1 -> pure PopAF
     0xF3 -> pure DisableInterrupt
     0xF5 -> Push <$> use af
     0xF6 -> do
         v <- pc <<+= 1
-        pure $ Or $ Address (cloneLens $ addr v)
+        pure $ Or (Address v)
     0xF8 -> StackStore <$> consumeByte
 
     0xFA -> do
         mcycle 2
-        v <- consumeWord
-        pure $ Ld (Register $ af.upperByte) $ Address (cloneLens $ addr v)
+        Ld (Register $ af.upperByte) . Address <$> consumeWord
 
     0xFB -> pure EnableInterrupt
     0xFE -> do
         v <- pc <<+= 1
-        pure $ Cmp $ Address (cloneLens $ addr v)
+        pure $ Cmp $ Address v
     0xFF -> pure $ Rst 0x38
 
     instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
-fromArgument :: Argument a -> Lens' Emulator a
+fromArgument :: Argument -> Lens' Emulator Word8
 fromArgument (Register r) = cpu.cloneLens r
-fromArgument (Address as) = mmu.cloneLens as
+fromArgument (Address  a) = mmu.cloneLens (addr a)
 
-toArgument :: Int -> Word8 -> Cpu -> Argument Word8
+toArgument :: Int -> Word8 -> Cpu -> Argument
 toArgument i n s = case shiftR n i .&. 7 of
     0 -> Register (bc.upperByte)
     1 -> Register (bc.lowerByte)
@@ -432,10 +430,10 @@ toArgument i n s = case shiftR n i .&. 7 of
     3 -> Register (de.lowerByte)
     4 -> Register (hl.upperByte)
     5 -> Register (hl.lowerByte)
-    6 -> Address (addr (s^.hl))
+    6 -> Address (s^.hl)
     7 -> Register (af.upperByte)
     _ -> error "Invalid instructionn argument"
 
-argCost :: Integer -> Integer -> Argument a -> Integer
+argCost :: Integer -> Integer -> Argument -> Integer
 argCost rc _ (Register _) = rc
 argCost _ ac (Address  _) = ac
