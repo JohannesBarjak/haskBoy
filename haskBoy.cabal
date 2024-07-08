@@ -42,6 +42,7 @@ executable hboy
     ghc-options: -Wall
     hs-source-dirs: app
     default-language: GHC2021
+    default-extensions: BlockArguments
 
 library
     exposed-modules: HaskBoy
@@ -63,6 +64,7 @@ library
     ghc-options: -Wall
     hs-source-dirs: src
     default-language: GHC2021
+    default-extensions: BlockArguments
 
 test-suite hboy-test
     Main-is:          Main.hs
@@ -79,3 +81,4 @@ test-suite hboy-test
 
     hs-source-dirs: test
     default-language: GHC2021
+    default-extensions: BlockArguments
