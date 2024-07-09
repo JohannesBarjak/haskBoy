@@ -13,11 +13,12 @@ module HaskBoy.Ppu.Execution
     ) where
 
 import Control.Lens
+
 import Control.Monad (forM_, when, guard)
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Maybe
 
-import Data.Bits ((.&.), shiftR, (.|.))
+import Data.Bits ((.&.), (.|.), testBit)
 import Data.Bool (bool)
 
 import Data.Function (on)
@@ -26,12 +27,11 @@ import Data.Maybe (fromMaybe)
 
 import Data.Sequence (Seq)
 import Data.Sequence qualified as S
-
 import Data.Word (Word8)
-import Foreign.Marshal (toBool)
 
 import HaskBoy.BitOps
 import HaskBoy.Emulator
+
 import HaskBoy.Mmu
 import HaskBoy.Ppu
 
@@ -115,7 +115,7 @@ tileRow mem ri ta = let ra = ta + (fromIntegral ri * 2) in
 
     -- | Get a single tile row from a pair of bytes
     where buildRow :: Word8 -> Word8 -> Seq Pixel
-          buildRow v1 v2 = [on toPixel (toBool . (.&. 1) . (`shiftR` i)) v1 v2 | i <- [7,6..0]]
+          buildRow v1 v2 = [on toPixel (`testBit` i) v1 v2 | i <- [7,6..0]]
 
 twoCompl :: Word8 -> Int
 twoCompl b
