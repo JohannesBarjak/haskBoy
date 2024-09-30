@@ -4,7 +4,7 @@
     pkgName = "hboy";
     system = "x86_64-linux";
     pkgs = import nixpkgs { inherit system; };
-    haskPkgs = pkgs.haskell.packages.ghc964;
+    haskPkgs = pkgs.haskell.packages.ghc965;
   in {
     packages.${system}.${pkgName} = haskPkgs.developPackage { root  = ./.; };
     defaultPackage.${system} = self.packages.${system}.${pkgName};
@@ -15,8 +15,9 @@
           ( haskPkgs.ghcWithPackages ( p: [
             p.haskell-language-server
             p.ghcid
-            p.cabal-install
           ]))
+
+          pkgs.cabal-install
 
           pkgs.pkg-config
           pkgs.SDL2 pkgs.SDL2_mixer
