@@ -68,6 +68,7 @@ lycUpdate = do
     lycIE <- use (mmu.readM 0xFF41 .bit 6)
     when lycIE $ mmu.writeM 0xFF0F .bit 1 .= True
 
+-- Draw background and sprites into the display.
 drawTiles :: MonadState Emulator m => m ()
 drawTiles = do
     lineY <- fromIntegral <$> use (mmu.ly)
@@ -109,6 +110,7 @@ bgScanline mem
 
           (ti, ri) = (mem^.ly + mem^.scy) `quotRem` 8
 
+-- Tile row, can be either a background or a sprite tile
 tileRow :: Mmu -> Word8 -> Address -> Seq Pixel
 tileRow mem ri ta = let ra = ta + (fromIntegral ri * 2) in
     buildRow (mem^.readM ra) (mem^.readM (ra + 1))
