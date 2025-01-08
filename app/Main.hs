@@ -78,6 +78,7 @@ handleEvent event = case SDL.eventPayload event of
     SDL.WindowClosedEvent _ -> error "Closed window :D"
     _ -> pure ()
 
+-- Render gameboy display onto an sdl texture.
 renderGbDisplay :: Seq Word8 -> SDL.Renderer -> SDL.Texture -> IO ()
 renderGbDisplay dp renderer texture = do
     pixels <- castPtr . fst <$> SDL.lockTexture texture Nothing
@@ -90,14 +91,15 @@ renderGbDisplay dp renderer texture = do
     SDL.present renderer
 
 rawDisplay :: State Emulator (Seq Word8)
-rawDisplay = mapM pixelToColor . join =<< use (ppu.display)
+rawDisplay = do
+    mem <- use mmu
+    fmap (pixelToColor mem) . join <$> use (ppu.display)
 
-pixelToColor :: Pixel -> State Emulator Word8
-pixelToColor p = do
-    palette <- use (cloneLens $ mmu.addr 0xFF47)
-    pure $ [255, 170, 85, 0] !! color palette
-
-    where color palette = fromIntegral (palette `shiftR` (fromEnum p * 2)) .&. 3
+-- Convert pixels to a grayscale colour.
+pixelToColor :: Mmu -> Pixel -> Word8
+pixelToColor mem p = [255, 170, 85, 0] !! color
+    where color = fromIntegral (palette `shiftR` (fromEnum p * 2)) .&. 3
+          palette = mem^.readM 0xFF47
 
 gbTexture :: SDL.Renderer -> IO SDL.Texture
 gbTexture renderer = SDL.createTexture renderer SDL.RGB24 SDL.TextureAccessStreaming (SDL.V2 160 144)
