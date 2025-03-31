@@ -59,10 +59,7 @@ toMemory xs = do
     let _hram  = Seq.replicate 0x7F 0
     let _ie    = 0
 
-    if length xs == 0x8000 then
-        Just $ Mmu {..}
-
-        else Nothing
+    Just $ Mmu {..}
 
 -- | Restricted access to the 'Mmu'
 {-# DEPRECATED addr "This function doesn't follow lens laws, it will be replaced by a setter and getter" #-}
