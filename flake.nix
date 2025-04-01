@@ -15,6 +15,7 @@
           ( haskPkgs.ghcWithPackages ( p: [
             p.haskell-language-server
             p.ghcid
+            p.hlint
           ]))
 
           pkgs.cabal-install
