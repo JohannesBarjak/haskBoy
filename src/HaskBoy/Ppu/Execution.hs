@@ -97,18 +97,20 @@ spriteScan mem = scanAttr <&> (,) <*> liftA2 (tileRow mem) ri ti
 
 bgScanline :: Mmu -> Seq Pixel
 bgScanline mem
-    = (tileRow mem ri . tileAddress =<< bgTileMaps)
+    = (tileRow mem ri . fromIntegral . tileAddress =<< bgTileMaps)
     & S.drop (fromIntegral $ mem^.scx)
     & S.cycleTaking 160
 
-    where bgTileMaps = let ta = 0x9800 + fromIntegral ti * 32 in
+    where bgTileMaps = let ta = tileMapAddress + fromIntegral ti * 32 in
             [mem^.readM i | i <- [ta..ta + 32]]
 
+          tileAddress :: Word8 -> Int
           tileAddress idx = if mem^.bgTileData
             then 0x8000 + (fromIntegral idx * 16)
-            else 0x9000 + (fromIntegral (twoCompl idx) * 16)
+            else 0x9000 + (twoCompl idx * 16)
 
           (ti, ri) = (mem^.ly + mem^.scy) `quotRem` 8
+          tileMapAddress = bool 0x9800 0x9C00 (mem^.bgTileMap)
 
 -- Tile row, can be either a background or a sprite tile
 tileRow :: Mmu -> Word8 -> Address -> Seq Pixel
@@ -141,9 +143,10 @@ lyc = lens (^?!ioreg.ix 0x45) \mem v -> mem&ioreg.ix 0x45 .~ v
 ly :: Lens' Mmu Word8
 ly = raw 0xFF44
 
-objSize, bgTileData :: Lens' Mmu Bool
+objSize, bgTileMap, bgTileData :: Lens' Mmu Bool
 
 objSize = lcdc.bit 2
+bgTileMap = lcdc.bit 3
 bgTileData = lcdc.bit 4
 
 lcdc :: Lens' Mmu Word8
