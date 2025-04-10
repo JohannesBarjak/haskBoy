@@ -47,16 +47,16 @@ dec r = do
 
     r #= result
 
-jr :: Bool -> State Emulator ()
+jr :: Bool -> (MonadState s m, HasCpu s, HasRegisters s, HasMmu s) => m ()
 jr jump = do
     sb <- consumeByte
-    nn <- fromIntegral <$> use (cpu.register.pc)
+    nn <- fromIntegral <$> use pc
 
     if jump then do
         jmp $ fromIntegral (nn + twoCompl sb)
-        cpu.tclock += 12
+        tclock += 12
 
-    else cpu.tclock += 8
+    else tclock += 8
 
 cmp :: (MonadState s m, HasRegisters s) => ALens' s Word8 -> m ()
 cmp r = do
@@ -68,15 +68,15 @@ cmp r = do
     hcarry .= (a .&. 0xF < n .&. 0xF)
     subOp .= True
 
-call :: Address -> State Emulator ()
+call :: (MonadState s m, HasRegisters s, HasMmu s) => Address -> m ()
 call nn = do
-    pushStack =<< use (cpu.register.pc)
+    pushStack =<< use pc
     jmp nn
 
 jmp :: (MonadState s m, HasRegisters s) => Address -> m ()
 jmp nn = pc .= nn
 
-ret :: State Emulator ()
+ret :: (MonadState s m, HasRegisters s, HasMmu s) => m ()
 ret = jmp =<< popStack
 
 sbc :: (MonadState s m, HasRegisters s) => Word8 -> m ()
@@ -216,25 +216,25 @@ consumeWord = do
     use (mmu.addr16 nn)
 
 -- Read the current byte and then increase the pc register
-consumeByte :: State Emulator Word8
+consumeByte :: (MonadState s m, HasRegisters s, HasMmu s) => m Word8
 consumeByte = do
-    nn <- use (cpu.register.pc)
-    cpu.register.pc += 1
+    nn <- use pc
+    pc += 1
 
-    use (mmu.cloneLens (addr nn))
+    use (readM nn)
 
 -- Pop 16-bit stack
-popStack :: State Emulator Word16
+popStack :: (MonadState s m, HasRegisters s, HasMmu s) => m Word16
 popStack = do
-    nn <- use (cpu.register.sp)
-    cpu.register.sp += 2
+    nn <- use sp
+    sp += 2
 
     use (mmu.addr16 nn)
 
 -- Push to the 16-bit stack
-pushStack :: Word16 -> State Emulator ()
+pushStack :: (MonadState s m, HasRegisters s, HasMmu s) => Word16 -> m ()
 pushStack v = do
-    cpu.register.sp -= 2
-    nn <- use (cpu.register.sp)
+    sp -= 2
+    nn <- use sp
 
     mmu.addr16 nn .= v

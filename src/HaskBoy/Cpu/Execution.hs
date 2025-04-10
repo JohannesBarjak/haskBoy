@@ -25,28 +25,28 @@ import HaskBoy.Emulator
 import HaskBoy.Mmu
 import Numeric (showHex)
 
-data Instruction
+data Instruction s
     = Nop
-    | Xor Argument
-    | Or Argument
+    | Xor (Argument s)
+    | Or (Argument s)
     | Cpl
-    | And Argument
-    | Ld Argument Argument
-    | Store16 !(ALens' Emulator Word16) !Word16
-    | Inc Argument
+    | And (Argument s)
+    | Ld (Argument s) (Argument s)
+    | Store16 !(ALens' s Word16) !Word16
+    | Inc (Argument s)
     | Inc16 !(ALens' Registers Word16)
-    | Dec Argument
+    | Dec (Argument s)
     | Dec16 !(ALens' Registers Word16)
-    | Add Argument
+    | Add (Argument s)
     | Add16 !(ALens' Registers Word16)
     | StackStore !Word8
-    | Sub Argument
-    | Sbc Argument
-    | Swap Argument
-    | Bit !Int Argument
-    | Res !Int Argument
-    | Set !Int Argument
-    | Cmp Argument
+    | Sub (Argument s)
+    | Sbc (Argument s)
+    | Swap (Argument s)
+    | Bit !Int (Argument s)
+    | Res !Int (Argument s)
+    | Set !Int (Argument s)
+    | Cmp (Argument s)
     | Jmp !Word16
     | JmpC !(ALens' Registers Bool) !Word16
     | Jr !Bool
@@ -60,9 +60,9 @@ data Instruction
     | EnableInterrupt
     | DisableInterrupt
 
-data Argument where
-    Register :: (ALens' Cpu Word8) -> Argument
-    Address :: Word16 -> Argument
+data Argument s where
+    Register :: HasRegisters s => (ALens' s Word8) -> Argument s
+    Address :: Word16 -> Argument s
 
 cycleCpu :: State Emulator ()
 cycleCpu = do
@@ -82,7 +82,7 @@ handleInterrupts = mapM_ (uncurry handleInterrupt) [(0,0x40), (1,0x48)]
                 writeM 0xFF0F .bit n .= False
                 mcycle 4
 
-execute :: Instruction -> State Emulator ()
+execute :: (MonadState s m, HasRegisters s, HasCpu s, HasMmu s) => Instruction s -> m ()
 execute = \case
     Nop -> mcycle 1
 
@@ -214,10 +214,10 @@ execute = \case
     EnableInterrupt -> mcycle 1 >> interruptEnable .= True
     DisableInterrupt -> mcycle 1 >> interruptEnable .= False
 
-mcycle :: Integer -> State Emulator ()
+mcycle :: (MonadState s m, HasCpu s) => Integer -> m ()
 mcycle v = tclock += (v * 4)
 
-getInstruction :: State Emulator Instruction
+getInstruction :: State Emulator (Instruction Emulator)
 getInstruction = consumeByte >>= \case
     0x00 -> pure Nop
 
@@ -431,11 +431,11 @@ getInstruction = consumeByte >>= \case
 
     instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
-fromArgument :: Argument -> Lens' Emulator Word8
-fromArgument (Register r) = cpu.cloneLens r
-fromArgument (Address  a) = mmu.cloneLens (addr a)
+fromArgument :: (HasRegisters s, HasMmu s) => Argument s -> Lens' s Word8
+fromArgument (Register r) = cloneLens r
+fromArgument (Address  a) = mmu.addr a
 
-toArgument :: Int -> Word8 -> Cpu -> Argument
+toArgument :: (HasRegisters s) => Int -> Word8 -> Cpu -> Argument s
 toArgument i n s = case shiftR n i .&. 7 of
     0 -> Register (bc.upperByte)
     1 -> Register (bc.lowerByte)
@@ -447,6 +447,6 @@ toArgument i n s = case shiftR n i .&. 7 of
     7 -> Register (af.upperByte)
     _ -> error "Invalid instructionn argument"
 
-argCost :: Integer -> Integer -> Argument -> Integer
+argCost :: Integer -> Integer -> Argument s -> Integer
 argCost rc _ (Register _) = rc
 argCost _ ac (Address  _) = ac
