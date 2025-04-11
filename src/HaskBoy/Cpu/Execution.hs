@@ -431,9 +431,18 @@ getInstruction = consumeByte >>= \case
 
     instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
+{-# DEPRECATED fromArgument "fromArgument is deprecated, use readArg and writeArg instead" #-}
 fromArgument :: (HasRegisters s, HasMmu s) => Argument s -> Lens' s Word8
 fromArgument (Register r) = cloneLens r
 fromArgument (Address  a) = mmu.addr a
+
+readArg :: HasMmu s => Argument s -> Getter s Word8
+readArg (Register r) = cloneLens r
+readArg (Address  a) = readM a
+
+writeArg :: HasMmu s => Argument s -> Setter' s Word8
+writeArg (Register r) = cloneLens r
+writeArg (Address  a) = writeM a
 
 toArgument :: (HasRegisters s) => Int -> Word8 -> Cpu -> Argument s
 toArgument i n s = case shiftR n i .&. 7 of
