@@ -208,10 +208,10 @@ cpl = do
 
 -- Read the current and following byte as a 16-bit word
 -- and then increase the pc register by 2
-consumeWord :: State Emulator Word16
+consumeWord :: (MonadState s m, HasRegisters s, HasMmu s) => m Word16
 consumeWord = do
-    nn <- use (cpu.register.pc)
-    cpu.register.pc += 2
+    nn <- use pc
+    pc += 2
 
     use (mmu.addr16 nn)
 
