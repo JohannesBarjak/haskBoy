@@ -163,10 +163,9 @@ swap r = do
 
     r #= result
 
-or :: (MonadState s m, HasRegisters s) => Getter s Word8 -> m ()
-or vl = do
+or :: (MonadState s m, HasRegisters s) => Word8 -> m ()
+or n = do
     a <- use (af.upperByte)
-    n <- use vl
 
     let result = a .|. n
 
