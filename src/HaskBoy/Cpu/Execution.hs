@@ -97,14 +97,14 @@ execute = \case
 
     StackStore v -> do
         mcycle 3
-        p <- use (cpu.register.sp)
+        p <- use sp
 
-        cpu.register.zero .= False
-        cpu.register.subOp .= False
-        cpu.register.hcarry .= (fromIntegral v .&. 0xF + (p .&. 0xF) > 0xF)
-        cpu.register.carry .= (toInteger v + toInteger p > 0xFF)
+        zero .= False
+        subOp .= False
+        hcarry .= (fromIntegral v .&. 0xF + (p .&. 0xF) > 0xF)
+        carry .= (toInteger v + toInteger p > 0xFF)
 
-        cpu.register.hl .= p + fromIntegral v
+        hl .= p + fromIntegral v
 
     Xor arg -> do
         mcycle (argCost 1 2 arg)
