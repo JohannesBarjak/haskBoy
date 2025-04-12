@@ -91,7 +91,7 @@ execute = \case
         mcycle (argCost 0 1 lhs)
         mcycle (argCost 0 1 rhs)
 
-        fromArgument lhs <~ use (fromArgument rhs)
+        writeArg lhs <~ use (readArg rhs)
 
     Store16 r v -> mcycle 3 >> cloneLens r .= v
 
@@ -108,7 +108,7 @@ execute = \case
 
     Xor arg -> do
         mcycle (argCost 1 2 arg)
-        xor =<< use (fromArgument arg)
+        xor =<< use (readArg arg)
 
     Or arg -> do
         mcycle (argCost 1 2 arg)
