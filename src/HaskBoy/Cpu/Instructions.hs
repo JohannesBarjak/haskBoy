@@ -163,10 +163,11 @@ swap r = do
 
     r #= result
 
-or :: (MonadState s m, HasRegisters s) => ALens' s Word8 -> m ()
+or :: (MonadState s m, HasRegisters s) => Getter s Word8 -> m ()
 or vl = do
     a <- use (af.upperByte)
-    n <- use (cloneLens vl)
+    n <- use vl
+
     let result = a .|. n
 
     zero .= (result == 0)

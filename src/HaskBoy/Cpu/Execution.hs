@@ -112,7 +112,7 @@ execute = \case
 
     Or arg -> do
         mcycle (argCost 1 2 arg)
-        Instr.or (fromArgument arg)
+        Instr.or (readArg arg)
 
     Cpl -> mcycle 1 >> cpl
 
