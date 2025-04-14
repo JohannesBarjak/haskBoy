@@ -9,6 +9,8 @@ module HaskBoy.Cpu.Instructions
     , res, cpl
     , consumeByte, consumeWord
     , popStack, pushStack
+    , Argument(..)
+    , readArg, writeArg
     ) where
 
 import Control.Lens
@@ -20,32 +22,41 @@ import Data.Word (Word8, Word16)
 import Foreign.Marshal.Utils (fromBool, toBool)
 
 import HaskBoy.Cpu
-import HaskBoy.Emulator
 import HaskBoy.Mmu
 
 import Prelude hiding (and, or)
 
-inc :: (MonadState s m, HasRegisters s) => ALens' s Word8 -> m ()
-inc r = do
-    v <- use (cloneLens r)
+data Argument s where
+    Register :: HasRegisters s => (ALens' s Word8) -> Argument s
+    Address :: Word16 -> Argument s
+
+readArg :: HasMmu s => Argument s -> Getter s Word8
+readArg (Register r) = cloneLens r
+readArg (Address  a) = readM a
+
+writeArg :: HasMmu s => Argument s -> Setter' s Word8
+writeArg (Register r) = cloneLens r
+writeArg (Address  a) = writeM a
+
+inc :: (MonadState s m, HasRegisters s, HasMmu s) => Word8 -> m Word8
+inc v = do
     let result = v + 1
 
     zero .= (result == 0)
     hcarry .= (v .&. 0xF == 0xF)
     subOp .= False
 
-    r #= result
+    pure result
 
-dec :: (MonadState s m, HasRegisters s) => ALens' s Word8 -> m ()
-dec r = do
-    v <- use (cloneLens r)
+dec :: (MonadState s m, HasRegisters s) => Word8 -> m Word8
+dec v = do
     let result = v - 1
 
     zero .= (result == 0)
     hcarry .= (v .&. 0xF == 0)
     subOp .= True
 
-    r #= result
+    pure result
 
 jr :: Bool -> (MonadState s m, HasCpu s, HasRegisters s, HasMmu s) => m ()
 jr jump = do

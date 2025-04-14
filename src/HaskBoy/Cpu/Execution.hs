@@ -18,6 +18,7 @@ import Data.Word (Word8, Word16)
 import HaskBoy.BitOps
 
 import HaskBoy.Cpu
+
 import HaskBoy.Cpu.Instructions hiding (bit)
 import HaskBoy.Cpu.Instructions qualified as Instr
 
@@ -59,10 +60,6 @@ data Instruction s
     | RetI
     | EnableInterrupt
     | DisableInterrupt
-
-data Argument s where
-    Register :: HasRegisters s => (ALens' s Word8) -> Argument s
-    Address :: Word16 -> Argument s
 
 cycleCpu :: State Emulator ()
 cycleCpu = do
@@ -122,11 +119,11 @@ execute = \case
 
     Inc arg -> do
         mcycle (argCost 1 3 arg)
-        inc (fromArgument arg)
+        writeArg arg <~ (inc =<< use (readArg arg))
 
     Dec arg -> do
         mcycle (argCost 1 3 arg)
-        dec (fromArgument arg)
+        writeArg arg <~ (dec =<< use (readArg arg))
 
     Dec16 r -> do
         mcycle 2
@@ -435,14 +432,6 @@ getInstruction = consumeByte >>= \case
 fromArgument :: (HasRegisters s, HasMmu s) => Argument s -> Lens' s Word8
 fromArgument (Register r) = cloneLens r
 fromArgument (Address  a) = mmu.addr a
-
-readArg :: HasMmu s => Argument s -> Getter s Word8
-readArg (Register r) = cloneLens r
-readArg (Address  a) = readM a
-
-writeArg :: HasMmu s => Argument s -> Setter' s Word8
-writeArg (Register r) = cloneLens r
-writeArg (Address  a) = writeM a
 
 toArgument :: (HasRegisters s) => Int -> Word8 -> Cpu -> Argument s
 toArgument i n s = case shiftR n i .&. 7 of
