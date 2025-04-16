@@ -115,7 +115,7 @@ execute = \case
 
     And arg -> do
         mcycle (argCost 1 2 arg)
-        Instr.and =<< use (fromArgument arg)
+        Instr.and =<< use (readArg arg)
 
     Inc arg -> do
         mcycle (argCost 1 3 arg)
@@ -131,33 +131,33 @@ execute = \case
 
     Add arg -> do
         mcycle (argCost 1 2 arg)
-        add =<< use (fromArgument arg)
+        add =<< use (readArg arg)
 
-    Add16 v -> mcycle 2 >> add16 (register.v)
+    Add16 v -> mcycle 2 >> (add16 =<< use (cloneLens $ register.v))
 
     Sub arg -> do
         mcycle (argCost 1 2 arg)
-        sub (fromArgument arg)
+        sub =<< use (readArg arg)
 
     Sbc arg -> do
         mcycle (argCost 1 2 arg)
-        sbc =<< use (fromArgument arg)
+        sbc =<< use (readArg arg)
 
     Swap arg -> do
         mcycle (argCost 2 4 arg)
-        swap (fromArgument arg)
+        writeArg arg <~ (swap =<< use (readArg arg))
 
     Bit n arg -> do
         mcycle (argCost 2 3 arg)
-        Instr.bit n (fromArgument arg)
+        Instr.bit n =<< use (readArg arg)
 
     Res n arg -> do
         mcycle (argCost 2 4 arg)
-        res n (fromArgument arg)
+        (writeArg arg .=) <$> res n =<< use (readArg arg)
 
     Set n arg -> do
         mcycle (argCost 2 4 arg)
-        fromArgument arg.bit n .= True
+        writeArg arg.bit n .= True
 
     Inc16 r -> do
         mcycle 2
@@ -165,7 +165,7 @@ execute = \case
 
     Cmp arg -> do
         mcycle (argCost 1 2 arg)
-        cmp (fromArgument arg)
+        cmp =<< use (readArg arg)
 
     Jr v -> jr v
     Jmp v -> pc .= v
@@ -427,11 +427,6 @@ getInstruction = consumeByte >>= \case
     0xFF -> pure $ Rst 0x38
 
     instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
-
-{-# DEPRECATED fromArgument "fromArgument is deprecated, use readArg and writeArg instead" #-}
-fromArgument :: (HasRegisters s, HasMmu s) => Argument s -> Lens' s Word8
-fromArgument (Register r) = cloneLens r
-fromArgument (Address  a) = mmu.addr a
 
 toArgument :: (HasRegisters s) => Int -> Word8 -> Cpu -> Argument s
 toArgument i n s = case shiftR n i .&. 7 of

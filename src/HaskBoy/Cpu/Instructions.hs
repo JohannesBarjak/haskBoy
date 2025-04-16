@@ -69,10 +69,9 @@ jr jump = do
 
     else tclock += 8
 
-cmp :: (MonadState s m, HasRegisters s) => ALens' s Word8 -> m ()
-cmp r = do
+cmp :: (MonadState s m, HasRegisters s) => Word8 -> m ()
+cmp n = do
     a <- use (af.upperByte)
-    n <- use (cloneLens r)
 
     zero .= (a == n)
     carry .= (a < n)
@@ -116,10 +115,9 @@ add n = do
 
     af.upperByte .= result
 
-add16 :: (MonadState s m, HasRegisters s) => ALens' s Word16 -> m ()
-add16 wl = do
+add16 :: (MonadState s m, HasRegisters s) => Word16 -> m ()
+add16 w = do
     v <- use hl
-    w <- use (cloneLens wl)
 
     hcarry .= ((v .&. 0x07FF) + (w .&. 0x07FF) > 0x07FF)
     carry .= (v > 0xFFFF - w)
@@ -127,23 +125,20 @@ add16 wl = do
 
     hl .= v + w
 
-sub :: (MonadState s m, HasRegisters s) => ALens' s Word8 -> m ()
+sub :: (MonadState s m, HasRegisters s) => Word8 -> m ()
 sub n = do
     -- Subtraction in the Gameboy sets flags in the same way as comparison
     cmp n
-    v <- use (cloneLens n)
-    af.upperByte -= v
+    af.upperByte -= n
 
-bit :: (MonadState s m, HasRegisters s) => Int -> ALens' s Word8 -> m ()
-bit n r = do
-    v <- use (cloneLens r)
-
+bit :: (MonadState s m, HasRegisters s) => Int -> Word8 -> m ()
+bit n v = do
     zero .= (v .&. shiftL 1 n == 0)
     hcarry .= True
     subOp .= False
 
-res :: (MonadState s m, HasRegisters s, HasMmu s) => Int -> Lens' s Word8 -> m ()
-res n r = r %= (.&. (1 .<<. n))
+res :: Int -> Word8 -> Word8
+res n v = v .&. (1 .<<. n)
 
 rl :: (MonadState s m, HasRegisters s) => Lens' s Word8 -> m ()
 rl r = do
@@ -162,9 +157,8 @@ rl r = do
     where newCarry = toBool . (.&. (1 `shiftL` 7)) <$> use r
 
 -- This instructions swaps nibbles
-swap :: (MonadState s m, HasRegisters s) => ALens' s Word8 -> m ()
-swap r = do
-    v <- use (cloneLens r)
+swap :: (MonadState s m, HasRegisters s) => Word8 -> m Word8
+swap v = do
     let result = v .>>. 4 .|. v .<<. 4;
 
     zero .= (result == 0)
@@ -172,7 +166,7 @@ swap r = do
     carry .= False
     subOp .= False
 
-    r #= result
+    pure result
 
 or :: (MonadState s m, HasRegisters s) => Word8 -> m ()
 or n = do
