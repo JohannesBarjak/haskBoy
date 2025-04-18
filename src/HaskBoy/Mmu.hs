@@ -99,7 +99,7 @@ writeM a = sets writeMmu
             | inRange (0xFF80, 0xFFFE) a = mem&hram .~ Seq.adjust' f (fromIntegral a - 0xFF80) (mem^.hram)
             | otherwise                  = mem&ie %~ f
 
-raw :: Address -> Lens' Mmu Word8
+raw :: HasMmu s => Address -> Lens' s Word8
 raw i = lens readMmu writeMmu
     where readMmu mem
             | inRange (0x0000, 0x7FFF) i = mem^?!rom.ix (fromIntegral i)
