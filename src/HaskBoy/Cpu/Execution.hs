@@ -214,7 +214,7 @@ execute = \case
 mcycle :: (MonadState s m, HasCpu s) => Integer -> m ()
 mcycle v = tclock += (v * 4)
 
-getInstruction :: State Emulator (Instruction Emulator)
+getInstruction :: (MonadState s m, HasRegisters s, HasMmu s, HasCpu s) => m (Instruction Emulator)
 getInstruction = consumeByte >>= \case
     0x00 -> pure Nop
 
@@ -364,12 +364,15 @@ getInstruction = consumeByte >>= \case
 
     0xD0 -> pure $ Ret . Just $ carry.lens not (const not)
     0xD1 -> pure (Pop de)
+
     0xD5 -> Push <$> use de
     0xD6 -> do
         v <- pc <<+= 1
         pure $ Sub (Address v)
+
     0xD8 -> pure $ Ret $ Just carry
     0xD9 -> pure RetI
+
     0xDE -> do
         v <- pc <<+= 1
         pure $ Sbc (Address v)
