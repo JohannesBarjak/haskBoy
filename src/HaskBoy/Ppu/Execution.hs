@@ -39,10 +39,10 @@ cyclePpu = do
     prev_clk <- use clock
     pmode <- use ppuMode
 
-    ly .= fromIntegral ((prev_clk `quot` 456) `rem` 154)
+    ly .= fromIntegral (prev_clk `quot` 456 `rem` 154)
     lineY <- use ly
 
-    when (lineY == 144) $ do
+    when (lineY == 144) do
         ppuMode .= VBlank
         writeM 0xFF0F .bit 0 .= True
 
