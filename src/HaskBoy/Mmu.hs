@@ -5,7 +5,7 @@ module HaskBoy.Mmu
     ( Address
     , Mmu(..)
     , HasMmu(..)
-    , addr, addr16, raw
+    , addr16, raw
     , readM, writeM
     , ObjAttr(..)
     , yPos, xPos, tlIdx
@@ -60,11 +60,6 @@ toMemory xs = do
     let _ie    = 0
 
     Just $ Mmu {..}
-
--- | Restricted access to the 'Mmu'
-{-# DEPRECATED addr "This function doesn't follow lens laws, it will be replaced by a setter and getter" #-}
-addr :: Address -> Lens' Mmu Word8
-addr i = lens (readByte i) (flip $ writeByte i)
 
 readM :: HasMmu s => Address -> Getter s Word8
 readM a = to writeMmu
