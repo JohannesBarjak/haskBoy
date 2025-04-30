@@ -214,7 +214,7 @@ execute = \case
 mcycle :: (MonadState s m, HasCpu s) => Integer -> m ()
 mcycle v = tclock += (v * 4)
 
-getInstruction :: (MonadState s m, HasRegisters s, HasMmu s, HasCpu s) => m (Instruction Emulator)
+getInstruction :: (MonadState s m, HasRegisters s, HasMmu s, HasCpu s) => m (Instruction s)
 getInstruction = consumeByte >>= \case
     0x00 -> pure Nop
 
