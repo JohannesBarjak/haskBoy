@@ -61,12 +61,12 @@ data Instruction s
     | EnableInterrupt
     | DisableInterrupt
 
-cycleCpu :: State Emulator ()
+cycleCpu :: (MonadState s m, HasCpu s, HasRegisters s, HasMmu s) => m ()
 cycleCpu = do
     handleInterrupts
     execute =<< getInstruction
 
-handleInterrupts :: State Emulator ()
+handleInterrupts :: (MonadState s m, HasMmu s, HasCpu s, HasRegisters s) => m ()
 handleInterrupts = mapM_ (uncurry handleInterrupt) [(0,0x40), (1,0x48)]
 
   where handleInterrupt n a = do
