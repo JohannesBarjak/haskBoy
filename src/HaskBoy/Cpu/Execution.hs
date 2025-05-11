@@ -13,7 +13,7 @@ import Control.Lens
 import Control.Monad (when)
 import Control.Monad.State.Strict
 
-import Data.Bits ((.&.), shiftR)
+import Data.Bits ((.&.), shiftR, Bits)
 import Data.Word (Word8, Word16)
 import HaskBoy.BitOps
 
@@ -22,7 +22,6 @@ import HaskBoy.Cpu
 import HaskBoy.Cpu.Instructions hiding (bit)
 import HaskBoy.Cpu.Instructions qualified as Instr
 
-import HaskBoy.Emulator
 import HaskBoy.Mmu
 import Numeric (showHex)
 
@@ -245,22 +244,22 @@ getInstruction = consumeByte >>= \case
     0x39 -> pure $ Add16 sp
     0x3B -> pure $ Dec16 sp
 
-    i | i .&. 0xF8 == 0x40 -> Ld (Register $ bc.upperByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x48 -> Ld (Register $ bc.lowerByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x50 -> Ld (Register $ de.upperByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x58 -> Ld (Register $ de.lowerByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x60 -> Ld (Register $ hl.upperByte) . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x68 -> Ld (Register $ hl.lowerByte) . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x40 -> Ld (Register $ bc.upperByte) . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x48 -> Ld (Register $ bc.lowerByte) . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x50 -> Ld (Register $ de.upperByte) . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x58 -> Ld (Register $ de.lowerByte) . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x60 -> Ld (Register $ hl.upperByte) . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x68 -> Ld (Register $ hl.lowerByte) . toArgument 0 i <$> use cpu
 
-    i | i .&. 0xF8 == 0x70 -> do
+    i | instrEnd i == 0x70 -> do
         v <- use hl
         Ld (Address v) . toArgument 0 i <$> use cpu
 
-    i | i .&. 0xF8 == 0x78 -> Ld (Register $ af.upperByte) . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x78 -> Ld (Register $ af.upperByte) . toArgument 0 i <$> use cpu
 
-    i | i .&. 0xF8 == 0x90 -> Sub . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0x98 -> Sbc . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0xA8 -> Xor . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x90 -> Sub . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x98 -> Sbc . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0xA8 -> Xor . toArgument 0 i <$> use cpu
 
     0x12 -> do
         nn <- use de
@@ -291,7 +290,7 @@ getInstruction = consumeByte >>= \case
         v <- hl <<-= 1
         pure $ Ld (Register $ af.upperByte) (Address v)
 
-    i | i .&. 0xF8 == 0x80 -> Add . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x80 -> Add . toArgument 0 i <$> use cpu
 
     0x18 -> pure (Jr True)
     0x20 -> Jr . not <$> use zero
@@ -309,9 +308,9 @@ getInstruction = consumeByte >>= \case
         nn <- use hl
         pure $ Ld (Address nn) (Register $ af.upperByte)
 
-    i | i .&. 0xF8 == 0xA0 -> And . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0xB0 -> Or . toArgument 0 i <$> use cpu
-    i | i .&. 0xF8 == 0xB8 -> Cmp . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0xA0 -> And . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0xB0 -> Or . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0xB8 -> Cmp . toArgument 0 i <$> use cpu
 
     0xC0 -> pure $ Ret . Just $ zero.lens not (const not)
     0xC8 -> pure $ Ret (Just zero)
@@ -334,25 +333,25 @@ getInstruction = consumeByte >>= \case
     0xCA -> JmpC (zero.lens not (const not)) <$> consumeWord
 
     0xCB -> consumeByte >>= \case
-        i | i .&. 0xF8 == 0x30 -> Swap . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x48 -> Bit 1 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x78 -> Bit 7 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x80 -> Res 0 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x88 -> Res 1 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x90 -> Res 2 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0x98 -> Res 3 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xA0 -> Res 4 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xA8 -> Res 5 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xB0 -> Res 6 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0x30 -> Swap . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0x48 -> Bit 1 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0x78 -> Bit 7 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0x80 -> Res 0 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0x88 -> Res 1 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0x90 -> Res 2 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0x98 -> Res 3 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xA0 -> Res 4 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xA8 -> Res 5 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xB0 -> Res 6 . toArgument 0 i <$> use cpu
 
-        i | i .&. 0xF8 == 0xC0 -> Set 0 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xC8 -> Set 1 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xD0 -> Set 2 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xD8 -> Set 3 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xE0 -> Set 4 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xE8 -> Set 5 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xF0 -> Set 6 . toArgument 0 i <$> use cpu
-        i | i .&. 0xF8 == 0xF8 -> Set 7 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xC0 -> Set 0 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xC8 -> Set 1 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xD0 -> Set 2 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xD8 -> Set 3 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xE0 -> Set 4 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xE8 -> Set 5 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xF0 -> Set 6 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0xF8 -> Set 7 . toArgument 0 i <$> use cpu
 
         arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
@@ -430,6 +429,9 @@ getInstruction = consumeByte >>= \case
     0xFF -> pure $ Rst 0x38
 
     instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
+
+instrEnd :: (Bits a, Num a) => a -> a
+instrEnd = (.&. 0xF8)
 
 toArgument :: (HasRegisters s) => Int -> Word8 -> Cpu -> Argument s
 toArgument i n s = case shiftR n i .&. 7 of
