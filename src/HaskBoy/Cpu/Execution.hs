@@ -225,10 +225,10 @@ getInstruction = consumeByte >>= \case
 
     0x03 -> pure (Inc16 bc)
 
-    i | i .&. 0xC7 == 0x04 -> Inc . toArgument 3 i <$> use cpu
-    i | i .&. 0xC7 == 0x05 -> Dec . toArgument 3 i <$> use cpu
+    i | instrMid i == 0x04 -> Inc . toArgument 3 i <$> use cpu
+    i | instrMid i == 0x05 -> Dec . toArgument 3 i <$> use cpu
 
-    i | i .&. 0xC7 == 0x06 -> do
+    i | instrMid i == 0x06 -> do
         v <- pc <<+= 1
         Ld  . toArgument 3 i <$> use cpu ?? Address v
 
@@ -432,6 +432,9 @@ getInstruction = consumeByte >>= \case
 
 instrEnd :: (Bits a, Num a) => a -> a
 instrEnd = (.&. 0xF8)
+
+instrMid :: (Bits a, Num a) => a -> a
+instrMid = (.&. 0xC7)
 
 toArgument :: (HasRegisters s) => Int -> Word8 -> Cpu -> Argument s
 toArgument i n s = case shiftR n i .&. 7 of
