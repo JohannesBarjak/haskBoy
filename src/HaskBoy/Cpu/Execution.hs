@@ -11,7 +11,9 @@ module HaskBoy.Cpu.Execution
 
 import Control.Lens
 import Control.Monad (when)
+
 import Control.Monad.State.Strict
+import Control.Monad.Reader
 
 import Data.Bits ((.&.), shiftR, Bits)
 import Data.Word (Word8, Word16)
@@ -213,6 +215,9 @@ execute = \case
 mcycle :: (MonadState s m, HasCpu s) => Integer -> m ()
 mcycle v = tclock += (v * 4)
 
+liftRd :: (MonadState s m) => Reader s a -> m a
+liftRd = gets . runReader
+
 getInstruction :: (MonadState s m, HasRegisters s, HasMmu s, HasCpu s) => m (Instruction s)
 getInstruction = consumeByte >>= \case
     0x00 -> pure Nop
@@ -225,12 +230,12 @@ getInstruction = consumeByte >>= \case
 
     0x03 -> pure (Inc16 bc)
 
-    i | instrMid i == 0x04 -> Inc . toArgument 3 i <$> use cpu
-    i | instrMid i == 0x05 -> Dec . toArgument 3 i <$> use cpu
+    i | instrMid i == 0x04 -> Inc <$> liftRd (toArgument 3 i)
+    i | instrMid i == 0x05 -> Dec <$> liftRd (toArgument 3 i)
 
     i | instrMid i == 0x06 -> do
         v <- pc <<+= 1
-        Ld  . toArgument 3 i <$> use cpu ?? Address v
+        Ld <$> liftRd (toArgument 3 i) ?? Address v
 
     0x09 -> pure $ Add16 bc
     0x0B -> pure $ Dec16 bc
@@ -244,22 +249,22 @@ getInstruction = consumeByte >>= \case
     0x39 -> pure $ Add16 sp
     0x3B -> pure $ Dec16 sp
 
-    i | instrEnd i == 0x40 -> Ld (Register $ bc.upperByte) . toArgument 0 i <$> use cpu
-    i | instrEnd i == 0x48 -> Ld (Register $ bc.lowerByte) . toArgument 0 i <$> use cpu
-    i | instrEnd i == 0x50 -> Ld (Register $ de.upperByte) . toArgument 0 i <$> use cpu
-    i | instrEnd i == 0x58 -> Ld (Register $ de.lowerByte) . toArgument 0 i <$> use cpu
-    i | instrEnd i == 0x60 -> Ld (Register $ hl.upperByte) . toArgument 0 i <$> use cpu
-    i | instrEnd i == 0x68 -> Ld (Register $ hl.lowerByte) . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x40 -> Ld (Register $ bc.upperByte) <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x48 -> Ld (Register $ bc.lowerByte) <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x50 -> Ld (Register $ de.upperByte) <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x58 -> Ld (Register $ de.lowerByte) <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x60 -> Ld (Register $ hl.upperByte) <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x68 -> Ld (Register $ hl.lowerByte) <$> liftRd (toArgument 0 i)
 
     i | instrEnd i == 0x70 -> do
         v <- use hl
-        Ld (Address v) . toArgument 0 i <$> use cpu
+        Ld (Address v) <$> liftRd (toArgument 0 i)
 
-    i | instrEnd i == 0x78 -> Ld (Register $ af.upperByte) . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x78 -> Ld (Register $ af.upperByte) <$> liftRd (toArgument 0 i)
 
-    i | instrEnd i == 0x90 -> Sub . toArgument 0 i <$> use cpu
-    i | instrEnd i == 0x98 -> Sbc . toArgument 0 i <$> use cpu
-    i | instrEnd i == 0xA8 -> Xor . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x90 -> Sub <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x98 -> Sbc <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0xA8 -> Xor <$> liftRd (toArgument 0 i)
 
     0x12 -> do
         nn <- use de
@@ -290,7 +295,7 @@ getInstruction = consumeByte >>= \case
         v <- hl <<-= 1
         pure $ Ld (Register $ af.upperByte) (Address v)
 
-    i | instrEnd i == 0x80 -> Add . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0x80 -> Add <$> liftRd (toArgument 0 i)
 
     0x18 -> pure (Jr True)
     0x20 -> Jr . not <$> use zero
@@ -308,9 +313,9 @@ getInstruction = consumeByte >>= \case
         nn <- use hl
         pure $ Ld (Address nn) (Register $ af.upperByte)
 
-    i | instrEnd i == 0xA0 -> And . toArgument 0 i <$> use cpu
-    i | instrEnd i == 0xB0 -> Or . toArgument 0 i <$> use cpu
-    i | instrEnd i == 0xB8 -> Cmp . toArgument 0 i <$> use cpu
+    i | instrEnd i == 0xA0 -> And <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0xB0 -> Or  <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0xB8 -> Cmp <$> liftRd (toArgument 0 i)
 
     0xC0 -> pure $ Ret . Just $ zero.lens not (const not)
     0xC8 -> pure $ Ret (Just zero)
@@ -333,25 +338,19 @@ getInstruction = consumeByte >>= \case
     0xCA -> JmpC (zero.lens not (const not)) <$> consumeWord
 
     0xCB -> consumeByte >>= \case
-        i | instrEnd i == 0x30 -> Swap . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0x48 -> Bit 1 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0x78 -> Bit 7 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0x80 -> Res 0 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0x88 -> Res 1 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0x90 -> Res 2 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0x98 -> Res 3 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xA0 -> Res 4 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xA8 -> Res 5 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xB0 -> Res 6 . toArgument 0 i <$> use cpu
+        i | instrEnd i == 0x30 -> Swap <$> liftRd (toArgument 0 i)
 
-        i | instrEnd i == 0xC0 -> Set 0 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xC8 -> Set 1 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xD0 -> Set 2 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xD8 -> Set 3 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xE0 -> Set 4 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xE8 -> Set 5 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xF0 -> Set 6 . toArgument 0 i <$> use cpu
-        i | instrEnd i == 0xF8 -> Set 7 . toArgument 0 i <$> use cpu
+        i | instrMid (instrEnd i) == 0x40 -> do
+              arg <- liftRd (toArgument 0 i)
+              pure $ Bit (fromIntegral $ shiftR i 3 .&. 7) arg
+
+        i | instrMid (instrEnd i) == 0x80 -> do
+              arg <- liftRd (toArgument 0 i)
+              pure $ Res (fromIntegral $ shiftR i 3 .&. 7) arg
+
+        i | instrMid (instrEnd i) == 0xC0 -> do
+              arg <- liftRd (toArgument 0 i)
+              pure $ Set (fromIntegral $ shiftR i 3 .&. 7) arg
 
         arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
@@ -436,16 +435,16 @@ instrEnd = (.&. 0xF8)
 instrMid :: (Bits a, Num a) => a -> a
 instrMid = (.&. 0xC7)
 
-toArgument :: (HasRegisters s) => Int -> Word8 -> Cpu -> Argument s
-toArgument i n s = case shiftR n i .&. 7 of
-    0 -> Register (bc.upperByte)
-    1 -> Register (bc.lowerByte)
-    2 -> Register (de.upperByte)
-    3 -> Register (de.lowerByte)
-    4 -> Register (hl.upperByte)
-    5 -> Register (hl.lowerByte)
-    6 -> Address (s^.hl)
-    7 -> Register (af.upperByte)
+toArgument :: (MonadReader s m, HasRegisters s) => Int -> Word8 -> m (Argument s)
+toArgument i n = case shiftR n i .&. 7 of
+    0 -> pure $ Register (bc.upperByte)
+    1 -> pure $ Register (bc.lowerByte)
+    2 -> pure $ Register (de.upperByte)
+    3 -> pure $ Register (de.lowerByte)
+    4 -> pure $ Register (hl.upperByte)
+    5 -> pure $ Register (hl.lowerByte)
+    6 -> Address <$> view hl
+    7 -> pure $ Register (af.upperByte)
     _ -> error "Invalid instructionn argument"
 
 argCost :: Integer -> Integer -> Argument s -> Integer
