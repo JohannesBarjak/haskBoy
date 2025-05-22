@@ -95,14 +95,7 @@ execute = \case
 
     StackStore v -> do
         mcycle 3
-        p <- use sp
-
-        zero .= False
-        subOp .= False
-        hcarry .= (fromIntegral v .&. 0xF + (p .&. 0xF) > 0xF)
-        carry .= (toInteger v + toInteger p > 0xFF)
-
-        hl .= p + fromIntegral v
+        stackStore v
 
     Xor arg -> do
         mcycle (argCost 1 2 arg)

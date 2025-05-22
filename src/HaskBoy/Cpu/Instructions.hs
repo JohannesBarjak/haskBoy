@@ -8,7 +8,7 @@ module HaskBoy.Cpu.Instructions
     , rl, bit, swap
     , res, cpl
     , consumeByte, consumeWord
-    , popStack, pushStack
+    , popStack, pushStack, stackStore
     , Argument(..)
     , readArg, writeArg
     ) where
@@ -227,6 +227,18 @@ consumeByte = do
     pc += 1
 
     use (readM nn)
+
+stackStore :: (MonadState s m, HasRegisters s) => Word8 -> m ()
+stackStore v = do
+  p <- use sp
+
+  zero .= False
+  subOp .= False
+  hcarry .= (fromIntegral v .&. 0xF + (p .&. 0xF) > 0xF)
+  carry .= (toInteger v + toInteger p > 0xFF)
+
+  hl .= p + fromIntegral v
+
 
 -- Pop 16-bit stack
 popStack :: (MonadState s m, HasRegisters s, HasMmu s) => m Word16
