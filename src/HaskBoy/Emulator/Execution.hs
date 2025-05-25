@@ -14,12 +14,12 @@ import HaskBoy.Ppu.Execution
 
 cycleEmulator :: Integer -> State Emulator ()
 cycleEmulator cycles
-    = when (cycles > 0) $ do
-        oldTime <- use (cpu.tclock)
-        cycleCpu
-        newTime <- use (cpu.tclock)
+  = when (cycles > 0) $ do
+    oldTime <- use (cpu.tclock)
+    cycleCpu
+    newTime <- use (cpu.tclock)
 
-        ppu.clock .= newTime `quot` 8
-        void $ runMaybeT cyclePpu
+    ppu.clock .= newTime `quot` 8
+    void $ runMaybeT cyclePpu
 
-        cycleEmulator (cycles - (newTime - oldTime))
+    cycleEmulator (cycles - (newTime - oldTime))

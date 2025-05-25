@@ -18,4 +18,4 @@ import Data.Bits (complement)
 
 main :: IO ()
 main = hspec do
-    pure ()
+  pure ()
