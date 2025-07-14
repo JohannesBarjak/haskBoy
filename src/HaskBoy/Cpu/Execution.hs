@@ -62,6 +62,18 @@ data Instruction s
   | EnableInterrupt
   | DisableInterrupt
 
+data Argument s where
+  Register :: HasRegisters s => (ALens' s Word8) -> Argument s
+  Address :: Word16 -> Argument s
+
+readArg :: HasMmu s => Argument s -> Getter s Word8
+readArg (Register r) = cloneLens r
+readArg (Address  a) = readM a
+
+writeArg :: HasMmu s => Argument s -> Setter' s Word8
+writeArg (Register r) = cloneLens r
+writeArg (Address  a) = writeM a
+
 cycleCpu :: (MonadState s m, HasCpu s, HasRegisters s, HasMmu s) => m ()
 cycleCpu = do
   handleInterrupts

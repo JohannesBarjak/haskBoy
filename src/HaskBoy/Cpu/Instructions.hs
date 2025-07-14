@@ -9,8 +9,6 @@ module HaskBoy.Cpu.Instructions
   , res, cpl
   , consumeByte, consumeWord
   , popStack, pushStack, stackStore
-  , Argument(..)
-  , readArg, writeArg
   ) where
 
 import Control.Lens
@@ -25,18 +23,6 @@ import HaskBoy.Cpu
 import HaskBoy.Mmu
 
 import Prelude hiding (and, or)
-
-data Argument s where
-  Register :: HasRegisters s => (ALens' s Word8) -> Argument s
-  Address :: Word16 -> Argument s
-
-readArg :: HasMmu s => Argument s -> Getter s Word8
-readArg (Register r) = cloneLens r
-readArg (Address  a) = readM a
-
-writeArg :: HasMmu s => Argument s -> Setter' s Word8
-writeArg (Register r) = cloneLens r
-writeArg (Address  a) = writeM a
 
 inc :: (MonadState s m, HasRegisters s, HasMmu s) => Word8 -> m Word8
 inc v = do
