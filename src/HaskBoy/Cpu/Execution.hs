@@ -334,15 +334,15 @@ getInstruction = consumeByte >>= \case
   0xCB -> consumeByte >>= \case
     i | instrEnd i == 0x30 -> Swap <$> liftRd (toArgument 0 i)
 
-    i | instrMid (instrEnd i) == 0x40 -> do
+    i | instrPrefix i == 0x40 -> do
           arg <- liftRd (toArgument 0 i)
           pure $ Bit (fromIntegral $ shiftR i 3 .&. 7) arg
 
-    i | instrMid (instrEnd i) == 0x80 -> do
+    i | instrPrefix i == 0x80 -> do
           arg <- liftRd (toArgument 0 i)
           pure $ Res (fromIntegral $ shiftR i 3 .&. 7) arg
 
-    i | instrMid (instrEnd i) == 0xC0 -> do
+    i | instrPrefix i == 0xC0 -> do
           arg <- liftRd (toArgument 0 i)
           pure $ Set (fromIntegral $ shiftR i 3 .&. 7) arg
 
@@ -428,11 +428,11 @@ getInstruction = consumeByte >>= \case
 
   instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
-instrEnd :: (Bits a, Num a) => a -> a
+           -- Utility functions to get instruction information from bytes.
+instrEnd, instrMid, instrPrefix :: (Bits a, Num a) => a -> a
 instrEnd = (.&. 0xF8)
-
-instrMid :: (Bits a, Num a) => a -> a
 instrMid = (.&. 0xC7)
+instrPrefix = instrMid . instrEnd
 
 toArgument :: (MonadReader s m, HasRegisters s) => Int -> Word8 -> m (Argument s)
 toArgument i n = case shiftR n i .&. 7 of
