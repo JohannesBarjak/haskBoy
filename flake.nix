@@ -4,25 +4,32 @@
     pkgName = "hboy";
     system = "x86_64-linux";
     pkgs = import nixpkgs { inherit system; };
-    haskPkgs = pkgs.haskell.packages.ghc965;
-  in {
-    packages.${system}.${pkgName} = haskPkgs.developPackage { root  = ./.; };
+    haskPkgs = pkgs.haskell.packages.ghc96;
+    in {
+      packages.${system}.${pkgName} =
+        let src = pkgs.nix-gitignore.gitignoreSource [] ./.;
+        in haskPkgs.callCabal2nix "" src {};
     defaultPackage.${system} = self.packages.${system}.${pkgName};
 
     devShells = {
-      ${system}.default = pkgs.mkShell {
-        buildInputs = [
-          ( haskPkgs.ghcWithPackages ( p: [
-            p.haskell-language-server
-            p.ghcid
-            p.hlint
-          ]))
+      ${system}.default = haskPkgs.shellFor {
+        buildInputs = with pkgs; [
+          ( with haskPkgs;
+            [
+              haskell-language-server
+              ghcid
+              hlint
+            ])
 
-          pkgs.cabal-install
-
-          pkgs.pkg-config
-          pkgs.SDL2 pkgs.SDL2_mixer
+          cabal-install
+          pkg-config
         ];
+
+        packages = haskPkgs: [
+          self.defaultPackage.${system}
+        ];
+
+        withHoogle = true;
       };
     };
   };

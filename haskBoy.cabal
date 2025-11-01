@@ -34,7 +34,7 @@ executable hboy
                     , mtl       ^>=2.3.1
                     , bytestring^>=0.11.5.3
                     , vector    ^>=0.13.0.0
-                    , sdl2      ^>=2.5.5.0
+                    , sdl2      ^>=2.5.5.1
                     , lens      ^>=5.2.2
                     , containers^>=0.6.7
 
