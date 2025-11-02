@@ -29,6 +29,9 @@ hzps = 4194304
 fps  = 60
 hzpf = 69905
 
+hoistState :: Monad m => State s a -> StateT s m a
+hoistState = state . runState
+
 frameTime :: Double
 frameTime = 1000 / fromIntegral fps
 
@@ -47,31 +50,30 @@ main = do
   SDL.rendererLogicalSize renderer $= Just (SDL.V2 160 144)
   texture <- gbTexture renderer
 
-  filename <- head <$> getArgs
-  parsedRom <- toMemory <$> loadRom filename
-
-  case parsedRom of
-    Just mem -> emulatorLoop (initialEmulator mem) 0 renderer texture
+  getArgs >>= parseRom >>= \case
+    Just mem -> evalStateT (emulatorLoop 0 renderer texture) (initialEmulator mem)
     Nothing  -> putStrLn "Couldn't parse file as a gameboy cartridge"
 
   SDL.destroyTexture texture
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
 
+  where parseRom = fmap toMemory . loadRom . head
+
 loadRom :: FilePath -> IO [Word8]
 loadRom f = BS.unpack <$> BS.readFile f
 
-emulatorLoop :: Emulator -> Integer -> SDL.Renderer -> SDL.Texture -> IO ()
-emulatorLoop prevState cycles renderer texture = do
-  let (dp, nextState) = runState (cycleEmulator cycles >> rawDisplay) prevState
+emulatorLoop :: Integer -> SDL.Renderer -> SDL.Texture -> StateT Emulator IO ()
+emulatorLoop cycles renderer texture = do
+  dp <- hoistState $ cycleEmulator cycles >> hoistState rawDisplay
 
   start <- SDL.time
-  void . mapM handleEvent =<< SDL.pollEvents
-  renderGbDisplay dp renderer texture
+  void . mapM (liftIO . handleEvent) =<< SDL.pollEvents
+  liftIO $ renderGbDisplay dp renderer texture
   end <- SDL.time
 
   let newCycles = round (fromIntegral hzps * (end - start) :: Double)
-  emulatorLoop nextState newCycles renderer texture
+  emulatorLoop newCycles renderer texture
 
 handleEvent :: SDL.Event -> IO ()
 handleEvent event = case SDL.eventPayload event of
@@ -91,9 +93,7 @@ renderGbDisplay dp renderer texture = do
   SDL.present renderer
 
 rawDisplay :: State Emulator (Seq Word8)
-rawDisplay = do
-  mem <- use mmu
-  fmap (pixelToColor mem) . join <$> use (ppu.display)
+rawDisplay = (. join) . fmap . pixelToColor <$> use mmu <*> use (ppu.display)
 
 -- Convert pixels to a grayscale colour.
 pixelToColor :: Mmu -> Pixel -> Word8
