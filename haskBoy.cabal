@@ -34,7 +34,7 @@ executable hboy
                     , mtl       ^>=2.3.1
                     , bytestring^>=0.11.5.3
                     , vector    ^>=0.13.0.0
-                    , sdl2      ^>=2.5.5.1
+                    , sdl2      ^>=2.5.5.0
                     , lens      ^>=5.2.2
                     , containers^>=0.6.7
 
@@ -78,6 +78,8 @@ test-suite hboy-test
                     , vector    ^>=0.13.0.0
                     , lens      ^>=5.2.2
                     , containers^>=0.6.7
+                    , aeson     ^>=2.2.2.0
+                    , bytestring^>=0.11.5.3
 
     hs-source-dirs: test
     default-language: GHC2021

@@ -58,7 +58,7 @@ main = do
   SDL.destroyRenderer renderer
   SDL.destroyWindow window
 
-  where parseRom = fmap toMemory . loadRom . head
+  where parseRom = fmap (`toMemory` Bank0) . loadRom . head
 
 loadRom :: FilePath -> IO [Word8]
 loadRom f = BS.unpack <$> BS.readFile f

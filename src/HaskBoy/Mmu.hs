@@ -9,7 +9,7 @@ module HaskBoy.Mmu
   , readM, writeM
   , ObjAttr(..)
   , yPos, xPos, tlIdx
-  , toMemory
+  , toMemory, Mapper(..)
   , objPri, yFlip, xFlip, dmgPal
   ) where
 
@@ -31,10 +31,17 @@ data Mmu = Mmu
   , _eram  :: !(Seq Word8)
   , _wram  :: !(Seq Word8)
   , _oam   :: !(Seq ObjAttr)
+  , _proh  :: !(Seq Word8)
   , _ioreg :: !(Seq Word8)
   , _hram  :: !(Seq Word8)
   , _ie    :: !Word8
+
+  , _mapper :: !Mapper
   }
+
+data Mapper
+  = Bank0
+  | RawAccess
 
 data ObjAttr = ObjAttr
   { _yPos    :: !Word8
@@ -48,51 +55,64 @@ type Address = Word16
 makeClassy ''Mmu
 makeLenses ''ObjAttr
 
-toMemory :: [Word8] -> Maybe Mmu
-toMemory xs = do
+toMemory :: [Word8] -> Mapper -> Maybe Mmu
+toMemory xs m = do
   let _rom   = Seq.fromList xs
   let _vram  = Seq.replicate 0x2000 0
   let _eram  = Seq.replicate 0x2000 0
   let _wram  = Seq.replicate 0x2000 0
   let _oam   = Seq.replicate 40 (ObjAttr 0 0 0 0)
+  let _proh  = Seq.replicate 0x5F 0
   let _ioreg = Seq.replicate 0x80 0
   let _hram  = Seq.replicate 0x7F 0
   let _ie    = 0
+  let _mapper = m;
 
   Just $ Mmu {..}
 
-readM :: HasMmu s => Address -> Getter s Word8
-readM a = to writeMmu
-  where writeMmu mem
-          | inRange (0x0000, 0x7FFF) a = Seq.index (mem^.rom) (fromIntegral a)
-          | inRange (0x8000, 0x9FFF) a = Seq.index (mem^.vram) (fromIntegral a - 0x8000)
-          | inRange (0xA000, 0xBFFF) a = Seq.index (mem^.eram) (fromIntegral a - 0xA000)
-          | inRange (0xC000, 0xCFFF) a = Seq.index (mem^.wram) (fromIntegral a - 0xC000)
-          | inRange (0xD000, 0xDFFF) a = Seq.index (mem^.wram) (fromIntegral a - 0xC000)
-          | inRange (0xE000, 0xEFFF) a = Seq.index (mem^.wram) (fromIntegral a - 0xE000)
-          | inRange (0xF000, 0xFDFF) a = Seq.index (mem^.wram) (fromIntegral a - 0xE000)
-          | inRange (0xFE00, 0xFE9F) a = readOam (mem^.oam) (fromIntegral a - 0xFE00)
-          | inRange (0xFEA0, 0xFEFF) a = 0xFF
-          | inRange (0xFF00, 0xFF7F) a = Seq.index (mem^.ioreg) (fromIntegral a - 0xFF00)
-          | inRange (0xFF80, 0xFFFE) a = Seq.index (mem^.hram) (fromIntegral a - 0xFF80)
-          | otherwise                  = mem^.ie
-
 writeM :: HasMmu s => Address -> Setter' s Word8
 writeM a = sets writeMmu
-  where writeMmu f mem
-          | inRange (0x0000, 0x7FFF) a = mem
-          | inRange (0x8000, 0x9FFF) a = mem&vram .~ Seq.adjust' f (fromIntegral a - 0x8000) (mem^.vram)
-          | inRange (0xA000, 0xBFFF) a = mem&eram .~ Seq.adjust' f (fromIntegral a - 0xA000) (mem^.eram)
-          | inRange (0xC000, 0xCFFF) a = mem&wram .~ Seq.adjust' f (fromIntegral a - 0xC000) (mem^.wram)
-          | inRange (0xD000, 0xDFFF) a = mem&wram .~ Seq.adjust' f (fromIntegral a - 0xC000) (mem^.wram)
-          | inRange (0xE000, 0xEFFF) a = mem
-          | inRange (0xF000, 0xFDFF) a = mem
-          | inRange (0xFE00, 0xFE9F) a = let idx = fromIntegral a - 0xFE00 in
-                                          mem&oam .~ Seq.adjust' (adjustOam idx f) (idx `rem` 40) (mem^.oam)
-          | inRange (0xFEA0, 0xFEFF) a = mem
-          | inRange (0xFF00, 0xFF7F) a = mem&ioreg .~ Seq.adjust' f (fromIntegral a - 0xFF00) (mem^.ioreg)
-          | inRange (0xFF80, 0xFFFE) a = mem&hram .~ Seq.adjust' f (fromIntegral a - 0xFF80) (mem^.hram)
+  where addrSpace = flip inRange a
+        writeBank mem bank f start = mem&bank %~ Seq.adjust' f (fromIntegral a - start)
+        writeMmu f mem
+          | addrSpace (0x0000, 0x7FFF) = handleWrite mem $ writeBank mem rom f 0
+          | addrSpace (0x8000, 0x9FFF) = writeBank mem vram f 0x8000
+          | addrSpace (0xA000, 0xBFFF) = writeBank mem eram f 0xA000
+          | addrSpace (0xC000, 0xCFFF) = writeBank mem wram f 0xC000
+          | addrSpace (0xD000, 0xDFFF) = writeBank mem wram f 0xC000
+          | addrSpace (0xE000, 0xEFFF) = handleWrite mem $ writeBank mem wram f 0xE000
+          | addrSpace (0xF000, 0xFDFF) = handleWrite mem $ writeBank mem wram f 0xE000
+          | addrSpace (0xFE00, 0xFE9F) = let idx = fromIntegral a - 0xFE00 in
+                                          mem&oam %~ Seq.adjust' (adjustOam idx f) (idx `rem` 40)
+          | addrSpace (0xFEA0, 0xFEFF) = handleWrite mem $ writeBank mem proh f 0xFEA0
+          | addrSpace (0xFF00, 0xFF7F) = writeBank mem ioreg f 0xFF00
+          | addrSpace (0xFF80, 0xFFFE) = writeBank mem hram  f 0xFF80
           | otherwise                  = mem&ie %~ f
+        handleWrite mem f = case mem^.mapper of
+          RawAccess -> f
+          Bank0 -> mem
+
+readM :: HasMmu s => Address -> Getter s Word8
+readM a = to readMmu
+  where addrSpace = flip inRange a
+        readBank mem bank start = Seq.index (mem^.bank) (fromIntegral a - start)
+        readMmu mem
+          | addrSpace (0x0000, 0x7FFF) = readBank mem rom 0x0000
+          | addrSpace (0x8000, 0x9FFF) = readBank mem vram 0x8000
+          | addrSpace (0xA000, 0xBFFF) = readBank mem eram 0xA000
+          | addrSpace (0xC000, 0xCFFF) = readBank mem wram 0xC000
+          | addrSpace (0xD000, 0xDFFF) = readBank mem wram 0xC000
+          | addrSpace (0xE000, 0xEFFF) = readBank mem wram 0xE000
+          | addrSpace (0xF000, 0xFDFF) = readBank mem wram 0xE000
+          | addrSpace (0xFE00, 0xFE9F) = readOam (mem^.oam) (fromIntegral a - 0xFE00)
+
+          | addrSpace (0xFEA0, 0xFEFF) = case mem^.mapper of
+                                           RawAccess -> readBank mem proh 0xFEA0
+                                           Bank0 -> 0xFF
+
+          | addrSpace (0xFF00, 0xFF7F) = readBank mem ioreg 0xFF00
+          | addrSpace (0xFF80, 0xFFFE) = readBank mem hram 0xFF80
+          | otherwise                  = mem^.ie
 
 raw :: HasMmu s => Address -> Lens' s Word8
 raw i = lens readMmu writeMmu
