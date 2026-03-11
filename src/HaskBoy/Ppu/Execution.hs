@@ -39,8 +39,8 @@ cyclePpu = do
   prev_clk <- use clock
   pmode <- use ppuMode
 
-  ly .= fromIntegral (prev_clk `quot` 456 `rem` 154)
-  lineY <- use ly
+  writeM ly .= fromIntegral (prev_clk `quot` 456 `rem` 154)
+  lineY <- use (readM ly)
 
   when (lineY == 144) do
     ppuMode .= VBlank
@@ -70,7 +70,7 @@ lycUpdate = do
 -- Draw background and sprites into the display.
 drawTiles :: (HasMmu s, HasPpu s) => MonadState s m => m ()
 drawTiles = do
-  lineY <- fromIntegral <$> use ly
+  lineY <- fromIntegral <$> use (readM ly)
   display.ix lineY <~ bgScanline <$> use mmu
   drawSprites . spriteScan =<< use mmu
 
@@ -80,18 +80,18 @@ drawSprites sprites = forM_ sprites \(obj, srow) -> do
   let writeSprite i v = fromMaybe v $
         S.lookup (i - fromIntegral (obj^.xPos) + 8) srow
 
-  lineY <- use ly
+  lineY <- use (readM ly)
   ppu.display.ix (fromIntegral lineY) %= S.mapWithIndex writeSprite
 
 spriteScan :: HasMmu s => s -> Seq (ObjAttr, Seq Pixel)
 spriteScan mem = scanAttr <&> (,) <*> liftA2 (tileRow mem) ri ti
 
   where scanAttr = S.take 10 $ S.filter visibleY (mem^.oam)
-        visibleY obj = inRange ((mem^.ly + 1 - size, mem^.ly)&both +~ 16) (obj^.yPos)
+        visibleY obj = inRange ((mem^.(readM ly) + 1 - size, mem^.(readM ly))&both +~ 16) (obj^.yPos)
         size = bool 8 16 (mem^.objSize)
 
         ti obj = 0x8000 + (fromIntegral (obj^.tlIdx .&. addrMode) * 16)
-        ri obj = size - (obj^.yPos - (mem^.ly) + size - 16)
+        ri obj = size - (obj^.yPos - (mem^.(readM ly)) + size - 16)
         addrMode = bool 0xFF 0xFE (mem^.objSize)
 
 bgScanline :: HasMmu s => s -> Seq Pixel
@@ -108,7 +108,7 @@ bgScanline mem
           then 0x8000 + (fromIntegral idx * 16)
           else 0x9000 + (twoCompl idx * 16)
 
-        (ti, ri) = (mem^.ly + mem^.scy) `quotRem` 8
+        (ti, ri) = (mem^.(readM ly) + mem^.scy) `quotRem` 8
         tileMapAddress = bool 0x9800 0x9C00 (mem^.bgTileMap)
 
 -- Tile row, can be either a background or a sprite tile
@@ -139,8 +139,8 @@ scy = lens (^?!ioreg.ix 0x42) \mem v -> mem&ioreg.ix 0x42 .~ v
 lyc :: HasMmu s => Lens' s Word8
 lyc = lens (^?!ioreg.ix 0x45) \mem v -> mem&ioreg.ix 0x45 .~ v
 
-ly :: HasMmu s => Lens' s Word8
-ly = raw 0xFF44
+ly :: Address
+ly = 0xFF44
 
 objSize, bgTileMap, bgTileData :: HasMmu s => Lens' s Bool
 

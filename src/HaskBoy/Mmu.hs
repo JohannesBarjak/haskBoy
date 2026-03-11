@@ -5,7 +5,7 @@ module HaskBoy.Mmu
   ( Address
   , Mmu(..)
   , HasMmu(..)
-  , addr16, raw
+  , addr16
   , readM, writeM
   , ObjAttr(..)
   , yPos, xPos, tlIdx
@@ -114,37 +114,6 @@ readM a = to readMmu
           | addrSpace (0xFF80, 0xFFFE) = readBank mem hram 0xFF80
           | otherwise                  = mem^.ie
 
-raw :: HasMmu s => Address -> Lens' s Word8
-raw i = lens readMmu writeMmu
-  where readMmu mem
-          | inRange (0x0000, 0x7FFF) i = mem^?!rom.ix (fromIntegral i)
-          | inRange (0x8000, 0x9FFF) i = mem^?!vram.ix (fromIntegral i - 0x8000)
-          | inRange (0xA000, 0xBFFF) i = mem^?!eram.ix (fromIntegral i - 0xA000)
-          | inRange (0xC000, 0xCFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
-          | inRange (0xD000, 0xDFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
-          | inRange (0xE000, 0xEFFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
-          | inRange (0xF000, 0xFDFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
-          | inRange (0xFE00, 0xFE9F) i = readOam (mem^.oam) (fromIntegral i - 0xFE00)
-          | inRange (0xFEA0, 0xFEFF) i = 0xFF
-          | inRange (0xFF00, 0xFF7F) i = mem^?!ioreg.ix (fromIntegral i - 0xFF00)
-          | inRange (0xFF80, 0xFFFE) i = mem^?!hram.ix (fromIntegral i - 0xFF80)
-          | otherwise                  = mem^?!ie
-
-        writeMmu mem v
-          | inRange (0x0000, 0x3FFF) i = mem
-          | inRange (0x4000, 0x7FFF) i = mem
-          | inRange (0x8000, 0x9FFF) i = mem&vram.ix (fromIntegral i - 0x8000) .~ v
-          | inRange (0xA000, 0xBFFF) i = mem&eram.ix (fromIntegral i - 0xA000) .~ v
-          | inRange (0xC000, 0xCFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
-          | inRange (0xD000, 0xDFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
-          | inRange (0xE000, 0xEFFF) i = mem
-          | inRange (0xF000, 0xFDFF) i = mem
-          | inRange (0xFE00, 0xFE9F) i = mem&oam %~ writeOam (fromIntegral i - 0xFE00) v
-          | inRange (0xFEA0, 0xFEFF) i = mem
-          | inRange (0xFF00, 0xFF7F) i = mem&ioreg.ix (fromIntegral i - 0xFF00) .~ v
-          | inRange (0xFF80, 0xFFFE) i = mem&hram.ix (fromIntegral i - 0xFF80) .~ v
-          | otherwise                  = mem&ie .~ v
-
 -- | Provides restricted access to a Word in the 'Mmu'.
 -- The Word is created by a pair of bytes in little endian order.
 addr16 :: Address -> Lens' Mmu Word16
@@ -225,7 +194,7 @@ writeByte i v mem
   | otherwise                  = mem&ie .~ v
 
 objPri, yFlip, xFlip, dmgPal :: Lens' ObjAttr Bool
-objPri = lens (^.objAttr.bit 7) (\obj v -> obj&objAttr.bit 7 .~ v)
-yFlip  = lens (^.objAttr.bit 6) (\obj v -> obj&objAttr.bit 6 .~ v)
-xFlip  = lens (^.objAttr.bit 5) (\obj v -> obj&objAttr.bit 5 .~ v)
-dmgPal = lens (^.objAttr.bit 4) (\obj v -> obj&objAttr.bit 4 .~ v)
+objPri = lens (view $ objAttr.bit 7) (flip . set $ objAttr.bit 7)
+yFlip  = lens (view $ objAttr.bit 6) (flip . set $ objAttr.bit 6)
+xFlip  = lens (view $ objAttr.bit 5) (flip . set $ objAttr.bit 5)
+dmgPal = lens (view $ objAttr.bit 4) (flip . set $ objAttr.bit 4)
