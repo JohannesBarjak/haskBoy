@@ -80,7 +80,7 @@ sbc n = do
   a <- use (af.upperByte)
   c <- use carry
 
-  let result = a - n + fromBool c
+  let result = a - n - fromBool c
 
   zero .= (result == 0)
   hcarry .= (a .&. 0xF < (n .&. 0xF) + fromBool c)

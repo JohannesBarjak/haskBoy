@@ -24,6 +24,7 @@ import Data.Word (Word8, Word16)
 import Data.Function (on)
 import Control.Monad (forM, forM_)
 import Data.Maybe (fromJust)
+import Numeric (showHex)
 
 data SM83Test = SM83Test
  { name    :: String
@@ -76,7 +77,9 @@ runTest test = do
   where joinBytes = (flip . (flip .)) (liftA2 (((.|.) . (`shiftL` 8)) `on` fromIntegral)) test
 
 spec = describe "SM83 instruction tests." do
-  forM_ (genNames "0" [0..6] <> genNames "4" [0..7]) \ns -> do
+  let lessThanANames = map (("0" <>) . show) [0..6] -- Hack for filenames < 16, where '01' would be '1'.
+  let tests = [(0x40, 7), (0x50, 7), (0x60, 7), (0x98, 7)]
+  forM_ (lessThanANames <> foldMap (uncurry genEnd) tests) \ns -> do
     it ("tests the cpu instruction: " <> ns) do
       content <- BL.readFile $ "test/sm83/v1/" ++ ns ++ ".json"
       let Just ts = decode content :: Maybe [SM83Test]
@@ -87,5 +90,7 @@ spec = describe "SM83 instruction tests." do
                                 (initialEmulator (fromJust . (`toMemory` RawAccess) $ replicate 0x8000 0))
 
         finalState `shouldBe` final t
-  where genNames = map . ((. show) . (<>))
+  where genNames   = map . (.|.)
+        genEnd :: Word16 -> Word16 -> [String]
+        genEnd p n = map (`showHex` "") $ genNames p [0..n]
 
