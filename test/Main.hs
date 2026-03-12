@@ -78,19 +78,23 @@ runTest test = do
 
 spec = describe "SM83 instruction tests." do
   let lessThanANames = map (("0" <>) . show) [0..6] -- Hack for filenames < 16, where '01' would be '1'.
-  let tests = [(0x40, 7), (0x50, 7), (0x60, 7), (0x98, 7)]
+  let tests = [ (0x30, 7), (0x38, 7), (0x40, 7), (0x48, 7), (0x50, 7), (0x58, 7)
+              , (0x60, 7), (0x68, 7), (0x70, 7), (0x78, 7), (0x80, 7), (0x90, 7)
+              , (0x98, 7), (0xA0, 7), (0xA8, 7), (0xB0, 7), (0xB8, 7)
+              ]
+
   forM_ (lessThanANames <> foldMap (uncurry genEnd) tests) \ns -> do
     it ("tests the cpu instruction: " <> ns) do
-      content <- BL.readFile $ "test/sm83/v1/" ++ ns ++ ".json"
-      let Just ts = decode content :: Maybe [SM83Test]
+      ts <- fromJust . decode <$> BL.readFile ("test/sm83/v1/" ++ ns ++ ".json")
+      forM_ (ts :: [SM83Test]) testInstruction
 
-      forM_ ts \t -> do
-        let (finalState, _) = runState
-                                (runTest $ initial t)
-                                (initialEmulator (fromJust . (`toMemory` RawAccess) $ replicate 0x8000 0))
-
-        finalState `shouldBe` final t
   where genNames   = map . (.|.)
         genEnd :: Word16 -> Word16 -> [String]
         genEnd p n = map (`showHex` "") $ genNames p [0..n]
+
+testInstruction t = do
+  let emptyMemory = fromJust $ toMemory (replicate 0x8000 0) RawAccess
+  let finalState = evalState (runTest $ initial t) (initialEmulator emptyMemory)
+
+  finalState `shouldBe` final t
 
