@@ -105,7 +105,7 @@ add16 :: (MonadState s m, HasRegisters s) => Word16 -> m ()
 add16 w = do
   v <- use hl
 
-  hcarry .= ((v .&. 0x07FF) + (w .&. 0x07FF) > 0x07FF)
+  hcarry .= ((v .&. 0x0FFF) + (w .&. 0x0FFF) > 0x0FFF)
   carry .= (v > 0xFFFF - w)
   subOp .= False
 

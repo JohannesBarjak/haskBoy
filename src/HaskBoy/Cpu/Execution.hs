@@ -139,7 +139,9 @@ execute = \case
     mcycle (argCost 1 2 arg)
     add =<< use (readArg arg)
 
-  Add16 v -> mcycle 2 >> (add16 =<< use (cloneLens $ register.v))
+  Add16 v -> do
+    mcycle 2
+    add16 =<< use (cloneLens $ register.v)
 
   Sub arg -> do
     mcycle (argCost 1 2 arg)
