@@ -32,6 +32,8 @@ data Instruction s
   | Xor (Argument s)
   | Or (Argument s)
   | Cpl
+  | Scf
+  | Ccf
   | And (Argument s)
   | Ld (Argument s) (Argument s)
   | Store16 !(ALens' s Word16) !Word16
@@ -118,6 +120,8 @@ execute = \case
     Instr.or =<< use (readArg arg)
 
   Cpl -> mcycle 1 >> cpl
+  Scf -> mcycle 1 >> scf
+  Ccf -> mcycle 1 >> ccf
 
   And arg -> do
     mcycle (argCost 1 2 arg)
@@ -313,6 +317,8 @@ getInstruction = consumeByte >>= \case
   0x21 -> Store16 hl <$> consumeWord
 
   0x2F -> pure Cpl
+  0x37 -> pure Scf
+  0x3F -> pure Ccf
 
   0x30 -> Jr . not <$> use carry
   0x38 -> Jr <$> use carry

@@ -6,7 +6,8 @@ module HaskBoy.Cpu.Instructions
   , add, sub, sbc
   , add16
   , rl, bit, swap
-  , res, cpl
+  , res
+  , cpl, scf, ccf
   , consumeByte, consumeWord
   , popStack, pushStack, stackStore
   ) where
@@ -196,6 +197,18 @@ cpl = do
   af.upperByte %= complement
   hcarry .= True
   subOp .= True
+
+scf :: (MonadState s m, HasRegisters s) => m ()
+scf = do
+  subOp  .= False
+  hcarry .= False
+  carry  .= True
+
+ccf :: (MonadState s m, HasRegisters s) => m ()
+ccf = do
+  subOp  .= False
+  hcarry .= False
+  carry  %= not
 
 -- Read the current and following byte as a 16-bit word
 -- and then increase the pc register by 2
