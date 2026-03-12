@@ -120,47 +120,20 @@ addr16 :: Address -> Lens' Mmu Word16
 addr16 i = lens (readWord i) (flip $ writeWord i)
 
 readWord :: Address -> Mmu -> Word16
-readWord i mmu' = fromIntegral ub `shiftL` 8 .|. fromIntegral lb
-  where ub = readByte (i + 1) mmu'
-        lb = readByte i mmu'
+readWord i mem = fromIntegral ub `shiftL` 8 .|. fromIntegral lb
+  where ub = mem^.readM (i + 1)
+        lb = mem^.readM i
 
 writeWord :: Address -> Word16 -> Mmu -> Mmu
-writeWord i v mmu' = writeByte i lb $ writeByte (i + 1) ub mmu'
+writeWord i v mem = writeM i .~ lb $ mem&writeM (i + 1) .~ ub
   where ub = fromIntegral $ v `shiftR` 8
         lb = fromIntegral $ v .&. 0xFF
-
-readByte :: Address -> Mmu -> Word8
-readByte i mem
-  | inRange (0x0000, 0x7FFF) i = mem^?!rom.ix (fromIntegral i)
-  | inRange (0x8000, 0x9FFF) i = mem^?!vram.ix (fromIntegral i - 0x8000)
-  | inRange (0xA000, 0xBFFF) i = mem^?!eram.ix (fromIntegral i - 0xA000)
-  | inRange (0xC000, 0xCFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
-  | inRange (0xD000, 0xDFFF) i = mem^?!wram.ix (fromIntegral i - 0xC000)
-  | inRange (0xE000, 0xEFFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
-  | inRange (0xF000, 0xFDFF) i = mem^?!wram.ix (fromIntegral i - 0xE000)
-  | inRange (0xFE00, 0xFE9F) i = readOam (mem^.oam) (fromIntegral i - 0xFE00)
-  | inRange (0xFEA0, 0xFEFF) i = 0xFF
-  | i == 0xFF00 = 0xCF
-  | inRange (0xFF00, 0xFF7F) i = mem^?!ioreg.ix (fromIntegral i - 0xFF00)
-  | inRange (0xFF80, 0xFFFE) i = mem^?!hram.ix (fromIntegral i - 0xFF80)
-  | otherwise                  = mem^?!ie
 
 readOam :: Seq ObjAttr -> Int -> Word8
 readOam mem av = extractByte $ mem^?!ix idx
   where idx = fromIntegral $ av `rem` 40
 
         extractByte = view $ [yPos, xPos, tlIdx, objAttr] !! oai
-        oai = av `rem` 4
-
-writeOam :: Int -> Word8 -> Seq ObjAttr -> Seq ObjAttr
-writeOam av v mem = case oai of
-  0 -> mem&ix idx.yPos .~ v
-  1 -> mem&ix idx.xPos .~ v
-  2 -> mem&ix idx.tlIdx .~ v
-  3 -> mem&ix idx.objAttr .~ v
-  _ -> error "Invalid argument for writeOam"
-
-  where idx = fromIntegral $ av `rem` 40
         oai = av `rem` 4
 
 adjustOam :: Int -> (Word8 -> Word8) -> ObjAttr -> ObjAttr
@@ -172,26 +145,6 @@ adjustOam a f obj = case oai of
   _ -> error "Invalid argument for writeOam"
 
   where oai = a `rem` 4
-
-writeByte :: Address -> Word8 -> Mmu -> Mmu
-writeByte i v mem
-  | inRange (0x0000, 0x3FFF) i = mem
-  | inRange (0x4000, 0x7FFF) i = mem
-  | inRange (0x8000, 0x9FFF) i = mem&vram.ix (fromIntegral i - 0x8000) .~ v
-  | inRange (0xA000, 0xBFFF) i = mem&eram.ix (fromIntegral i - 0xA000) .~ v
-  | inRange (0xC000, 0xCFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
-  | inRange (0xD000, 0xDFFF) i = mem&wram.ix (fromIntegral i - 0xC000) .~ v
-  | inRange (0xE000, 0xEFFF) i = mem
-  | inRange (0xF000, 0xFDFF) i = mem
-  | inRange (0xFE00, 0xFE9F) i = mem&oam %~ writeOam (fromIntegral i - 0xFE00) v
-  | inRange (0xFEA0, 0xFEFF) i = mem
-  | inRange (0xFF00, 0xFF7F) i = let rdOnly = [0x44] in
-      if i `notElem` rdOnly then
-        mem&ioreg.ix (fromIntegral i - 0xFF00) .~ v
-      else mem
-
-  | inRange (0xFF80, 0xFFFE) i = mem&hram.ix (fromIntegral i - 0xFF80) .~ v
-  | otherwise                  = mem&ie .~ v
 
 objPri, yFlip, xFlip, dmgPal :: Lens' ObjAttr Bool
 objPri = lens (view $ objAttr.bit 7) (flip . set $ objAttr.bit 7)
