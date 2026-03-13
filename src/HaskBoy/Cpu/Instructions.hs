@@ -1,23 +1,29 @@
 module HaskBoy.Cpu.Instructions
   ( inc, dec
   , and, xor, or
-  , jr, call, jmp, ret
+  , jr, callC, call
+  , jmp, ret
   , cmp
   , add, adc, sub, sbc
+  , daa
   , add16
   , rl, bit, swap
-  , rotA, res
+  , rocA, rotA, res
   , cpl, scf, ccf
   , consumeByte, consumeWord
   , popStack, pushStack, stackStore
+  , mcycle
   ) where
 
 import Control.Lens
 import Control.Monad.State.Strict
+import Control.Monad (when)
 
-import Data.Bits ((.&.), (.|.), shiftL, shiftR, (.<<.), (.>>.), complement)
-import Data.Bits qualified as Bits
+import Data.Bits ((.&.), (.|.), shiftL, shiftR, (.<<.), (.>>.))
+import Data.Bits qualified as B
+
 import Data.Word (Word8, Word16)
+import Data.Bool (bool)
 import Foreign.Marshal.Utils (fromBool, toBool)
 
 import HaskBoy.Cpu
@@ -65,6 +71,16 @@ cmp n = do
   hcarry .= (a .&. 0xF < n .&. 0xF)
   subOp .= True
 
+callC :: (MonadState s m, HasRegisters s, HasMmu s, HasCpu s) => Bool -> Address -> m ()
+callC c a = do
+  when c do
+    mcycle 3
+
+    pushStack =<< use (register.pc)
+    jmp a
+
+  mcycle 3
+
 call :: (MonadState s m, HasRegisters s, HasMmu s) => Address -> m ()
 call nn = do
   pushStack =<< use pc
@@ -75,6 +91,27 @@ jmp nn = pc .= nn
 
 ret :: (MonadState s m, HasRegisters s, HasMmu s) => m ()
 ret = jmp =<< popStack
+
+daa :: (MonadState s m, HasRegisters s) => m ()
+daa = do
+  a <- use (af.upperByte)
+
+  h <- use hcarry
+  c <- use carry
+  s <- use subOp
+
+  let offTens = bool 0 0x60 (not s && a > 0x99 || c)
+  let offOnes = bool 0 0x06 (not s && a .&. 0xF > 0x9 || h)
+
+  let result = if s then
+        a - offOnes - offTens
+      else a + offOnes + offTens
+
+  zero .= (result == 0)
+  hcarry .= False
+  carry .= (offTens /= 0)
+
+  af.upperByte .= result
 
 sbc :: (MonadState s m, HasRegisters s) => Word8 -> m ()
 sbc n = do
@@ -156,6 +193,17 @@ rl r = do
 
   where newCarry = toBool . (.&. (1 `shiftL` 7)) <$> use r
 
+rocA :: (MonadState s m, HasRegisters s) => Bool -> m ()
+rocA right = do
+  a <- use (af.upperByte)
+
+  af.upperByte .= B.rotate a (bool 1 (-1) right)
+
+  zero   .= False
+  subOp  .= False
+  hcarry .= False
+  carry .= toBool (a .&. bool 0x80 1 right)
+
 -- | The boolean determines whether to rotate left or right, False is left and True is right.
 rotA :: (MonadState s m, HasRegisters s) => Bool -> m ()
 rotA right = do
@@ -201,7 +249,7 @@ or n = do
 xor :: (MonadState s m, HasRegisters s) => Word8 -> m ()
 xor n = do
   a <- use (af.upperByte)
-  let result = Bits.xor a n
+  let result = B.xor a n
 
   zero .= (result == 0)
   hcarry .= False
@@ -224,7 +272,7 @@ and n = do
 
 cpl :: (MonadState s m, HasRegisters s) => m ()
 cpl = do
-  af.upperByte %= complement
+  af.upperByte %= B.complement
   hcarry .= True
   subOp .= True
 
@@ -239,6 +287,10 @@ ccf = do
   subOp  .= False
   hcarry .= False
   carry  %= not
+
+-- Function for machine cycles.
+mcycle :: (MonadState s m, HasCpu s) => Integer -> m ()
+mcycle v = tclock += (v * 4)
 
 -- Read the current and following byte as a 16-bit word
 -- and then increase the pc register by 2

@@ -6,7 +6,7 @@ module HaskBoy.Mmu
   , Mmu(..)
   , HasMmu(..)
   , addr16
-  , readM, writeM
+  , readM, writeM, readM16, writeM16
   , ObjAttr(..)
   , yPos, xPos, tlIdx
   , toMemory, Mapper(..)
@@ -20,7 +20,6 @@ import Data.Sequence (Seq)
 
 import Data.Word (Word8, Word16)
 import Data.Bits (shiftL, shiftR, (.|.), (.&.))
-
 import Data.Ix (inRange)
 
 import HaskBoy.BitOps
@@ -117,17 +116,20 @@ readM a = to readMmu
 -- | Provides restricted access to a Word in the 'Mmu'.
 -- The Word is created by a pair of bytes in little endian order.
 addr16 :: Address -> Lens' Mmu Word16
-addr16 i = lens (readWord i) (flip $ writeWord i)
+addr16 i = lens (view $ readM16 i) (flip . set $ writeM16 i)
 
-readWord :: Address -> Mmu -> Word16
-readWord i mem = fromIntegral ub `shiftL` 8 .|. fromIntegral lb
-  where ub = mem^.readM (i + 1)
-        lb = mem^.readM i
+readM16 :: HasMmu s => Address -> Getter s Word16
+readM16 a = to $ \mem ->
+  let ub = fromIntegral $ mem^.readM (a + 1) in
+  let lb = fromIntegral $ mem^.readM a in
+    shiftL ub 8 .|. lb
 
-writeWord :: Address -> Word16 -> Mmu -> Mmu
-writeWord i v mem = writeM i .~ lb $ mem&writeM (i + 1) .~ ub
-  where ub = fromIntegral $ v `shiftR` 8
-        lb = fromIntegral $ v .&. 0xFF
+writeM16 :: HasMmu s => Address -> Setter' s Word16
+writeM16 a = sets $ \f mem -> let v = f a in
+  let ub = fromIntegral (shiftR v 8) in
+  let lb = fromIntegral (v .&. 0xFF) in
+    mem&writeM (a + 1) .~ ub
+       &writeM a .~ lb
 
 readOam :: Seq ObjAttr -> Int -> Word8
 readOam mem av = extractByte $ mem^?!ix idx

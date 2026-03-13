@@ -36,6 +36,7 @@ data Instruction s
   | Ccf
   | And (Argument s)
   | Ld (Argument s) (Argument s)
+  | Ld16 (Argument16 s) (Argument16 s)
   | Store16 !(ALens' s Word16) !Word16
   | Inc (Argument s)
   | Inc16 !(ALens' Registers Word16)
@@ -43,24 +44,26 @@ data Instruction s
   | Dec16 !(ALens' Registers Word16)
   | Add (Argument s)
   | Adc (Argument s)
+  | DAA
   | Add16 !(ALens' Registers Word16)
   | StackStore !Word8
   | Sub (Argument s)
   | Sbc (Argument s)
   | Swap (Argument s)
-  | RrA | RlA
+  | RotA Bool | RocA Bool
   | Bit !Int (Argument s)
   | Res !Int (Argument s)
   | Set !Int (Argument s)
   | Cmp (Argument s)
   | Jmp !Word16
-  | JmpC !(ALens' Registers Bool) !Word16
+  | JmpC !(Getter Registers Bool) !Word16
   | Jr !Bool
   | Push !Word16
   | Pop !(ALens' Registers Word16)
   | PopAF
   | Call !Word16
-  | Rst !Word16
+  | CallC !(Getter Registers Bool) !Word16
+  | Rst !(Getter Registers Word16) !Word16
   | Ret !(Maybe (ALens' Registers Bool))
   | RetI
   | EnableInterrupt
@@ -70,13 +73,25 @@ data Argument s where
   Register :: HasRegisters s => (ALens' s Word8) -> Argument s
   Address :: Word16 -> Argument s
 
-readArg :: HasMmu s => Argument s -> Getter s Word8
-readArg (Register r) = cloneLens r
-readArg (Address  a) = readM a
+data Argument16 s where
+  Register16 :: HasRegisters s => (ALens' s Word16) -> Argument16 s
+  Address16  :: Word16 -> Argument16 s
 
-writeArg :: HasMmu s => Argument s -> Setter' s Word8
-writeArg (Register r) = cloneLens r
-writeArg (Address  a) = writeM a
+read8 :: HasMmu s => Argument s -> Getter s Word8
+read8 (Register r) = cloneLens r
+read8 (Address  a) = readM a
+
+write8 :: HasMmu s => Argument s -> Setter' s Word8
+write8 (Register r) = cloneLens r
+write8 (Address  a) = writeM a
+
+read16 :: HasMmu s => Argument16 s -> Getter s Word16
+read16 (Register16 r) = cloneLens r
+read16 (Address16  a) = readM16 a
+
+write16 :: HasMmu s => Argument16 s -> Setter' s Word16
+write16 (Register16 r) = cloneLens r
+write16 (Address16  a) = writeM16 a
 
 cycleCpu :: (MonadState s m, HasCpu s, HasRegisters s, HasMmu s) => m ()
 cycleCpu = do
@@ -105,7 +120,13 @@ execute = \case
     mcycle (argCost 0 1 lhs)
     mcycle (argCost 0 1 rhs)
 
-    writeArg lhs <~ use (readArg rhs)
+    write8 lhs <~ use (read8 rhs)
+
+  Ld16 lhs rhs -> do
+    mcycle 2
+    mcycle (arg16Cost 1 3 lhs)
+
+    write16 lhs <~ use (read16 rhs)
 
   Store16 r v -> mcycle 3 >> cloneLens r .= v
 
@@ -115,11 +136,11 @@ execute = \case
 
   Xor arg -> do
     mcycle (argCost 1 2 arg)
-    xor =<< use (readArg arg)
+    xor =<< use (read8 arg)
 
   Or arg -> do
     mcycle (argCost 1 2 arg)
-    Instr.or =<< use (readArg arg)
+    Instr.or =<< use (read8 arg)
 
   Cpl -> mcycle 1 >> cpl
   Scf -> mcycle 1 >> scf
@@ -127,27 +148,29 @@ execute = \case
 
   And arg -> do
     mcycle (argCost 1 2 arg)
-    Instr.and =<< use (readArg arg)
+    Instr.and =<< use (read8 arg)
 
   Inc arg -> do
     mcycle (argCost 1 3 arg)
-    writeArg arg <~ (inc =<< use (readArg arg))
+    write8 arg <~ (inc =<< use (read8 arg))
 
   Dec arg -> do
     mcycle (argCost 1 3 arg)
-    writeArg arg <~ (dec =<< use (readArg arg))
+    write8 arg <~ (dec =<< use (read8 arg))
 
   Dec16 r -> do
     mcycle 2
     register.cloneLens r -= 1
 
+  DAA -> mcycle 1 >> daa
+
   Add arg -> do
     mcycle (argCost 1 2 arg)
-    add =<< use (readArg arg)
+    add =<< use (read8 arg)
 
   Adc arg -> do
     mcycle (argCost 1 2 arg)
-    adc =<< use (readArg arg)
+    adc =<< use (read8 arg)
 
   Add16 v -> do
     mcycle 2
@@ -155,30 +178,30 @@ execute = \case
 
   Sub arg -> do
     mcycle (argCost 1 2 arg)
-    sub =<< use (readArg arg)
+    sub =<< use (read8 arg)
 
   Sbc arg -> do
     mcycle (argCost 1 2 arg)
-    sbc =<< use (readArg arg)
+    sbc =<< use (read8 arg)
 
   Swap arg -> do
     mcycle (argCost 2 4 arg)
-    writeArg arg <~ (swap =<< use (readArg arg))
+    write8 arg <~ (swap =<< use (read8 arg))
 
   Bit n arg -> do
     mcycle (argCost 2 3 arg)
-    Instr.bit n =<< use (readArg arg)
+    Instr.bit n =<< use (read8 arg)
 
-  RlA -> mcycle 1 >> rotA False
-  RrA -> mcycle 1 >> rotA True
+  RocA b -> mcycle 1 >> rocA b
+  RotA b -> mcycle 1 >> rotA b
 
   Res n arg -> do
     mcycle (argCost 2 4 arg)
-    (writeArg arg .=) <$> res n =<< use (readArg arg)
+    (write8 arg .=) <$> res n =<< use (read8 arg)
 
   Set n arg -> do
     mcycle (argCost 2 4 arg)
-    writeArg arg.bit n .= True
+    write8 arg.bit n .= True
 
   Inc16 r -> do
     mcycle 2
@@ -186,15 +209,14 @@ execute = \case
 
   Cmp arg -> do
     mcycle (argCost 1 2 arg)
-    cmp =<< use (readArg arg)
+    cmp =<< use (read8 arg)
 
   Jr v -> jr v
   Jmp v -> pc .= v
 
   JmpC k w -> do
     mcycle 3
-    use (register.cloneLens k) >>=
-        flip when (mcycle 1 >> jmp w)
+    use (register.k) >>= flip when (mcycle 1 >> jmp w)
 
   Push v -> do
     mcycle 4
@@ -210,11 +232,12 @@ execute = \case
     af <~ popStack
     af.lowerByte .= v
 
+  CallC c a -> use (register.c) >>= (`callC` a)
   Call v -> call v
 
-  Rst v -> do
+  Rst r v -> do
     mcycle 4
-    pushStack v
+    pushStack =<< use (register.r)
     jmp v
 
   Ret mk -> mcycle 2 >> case mk of
@@ -231,9 +254,6 @@ execute = \case
 
   EnableInterrupt -> mcycle 1 >> interruptEnable .= True
   DisableInterrupt -> mcycle 1 >> interruptEnable .= False
-
-mcycle :: (MonadState s m, HasCpu s) => Integer -> m ()
-mcycle v = tclock += (v * 4)
 
 liftRd :: (MonadState s m) => Reader s a -> m a
 liftRd = gets . runReader
@@ -256,6 +276,8 @@ getInstruction = consumeByte >>= \case
   i | instrMid i == 0x06 -> do
     v <- pc <<+= 1
     Ld <$> liftRd (toArgument 3 i) ?? Address v
+
+  0x08 -> (`Ld16` Register16 sp) . Address16 <$> consumeWord
 
   -- At the moment stop will act as a nop instruction.
   0x10 -> pure Nop
@@ -319,6 +341,8 @@ getInstruction = consumeByte >>= \case
     v <- hl <<-= 1
     pure $ Ld (Register $ af.upperByte) (Address v)
 
+  0x27 -> pure DAA
+
   i | instrEnd i == 0x80 -> Add <$> liftRd (toArgument 0 i)
   i | instrEnd i == 0x88 -> Adc <$> liftRd (toArgument 0 i)
 
@@ -348,21 +372,19 @@ getInstruction = consumeByte >>= \case
   0xC8 -> pure $ Ret (Just zero)
 
   0xC1 -> pure (Pop bc)
-
-  0xC3 -> do
-    tclock += 16
-    Jmp <$> consumeWord
+  0xC2 -> JmpC (zero.to not) <$> consumeWord
+  0xC3 -> mcycle 4 >> Jmp <$> consumeWord
 
   0xC5 -> Push <$> use bc
-  0xC6 -> do
-    v <- pc <<+= 1
-    pure $ Add (Address v)
+
+  0xC6 -> Add . Address <$> (pc <<+= 1)
+  0xCE -> Adc . Address <$> (pc <<+= 1)
 
   0xC9 -> do
     tclock += 16
     pure (Ret Nothing)
 
-  0xCA -> JmpC (zero.lens not (const not)) <$> consumeWord
+  0xCA -> JmpC zero <$> consumeWord
 
   0xCB -> consumeByte >>= \case
     i | instrEnd i == 0x30 -> Swap <$> liftRd (toArgument 0 i)
@@ -381,14 +403,20 @@ getInstruction = consumeByte >>= \case
 
     arg -> error $ "Invalid CB argument: " ++ showHex arg ""
 
-  0x17 -> pure RlA
-  0x1F -> pure RrA
+  0x07 -> pure $ RocA False
+  0x0F -> pure $ RocA True
+  0x17 -> pure $ RotA False
+  0x1F -> pure $ RotA True
 
-  0xCD -> do
-    tclock += 24
-    Call <$> consumeWord
+  0xC4 -> CallC (zero.to not) <$> consumeWord
+  0xCC -> CallC zero <$> consumeWord
+  0xCD -> mcycle 6 >> Call <$> consumeWord
 
-  0xCF -> pure $ Rst 0x08
+  0xC7 -> pure $ Rst pc 0x00
+  0xCF -> pure $ Rst pc 0x08
+  0xEF -> pure $ Rst pc 0x28
+  0xDF -> pure $ Rst hl 0x18
+  0xFF -> pure $ Rst pc 0x38
 
   0xD0 -> pure $ Ret . Just $ carry.lens not (const not)
   0xD1 -> pure (Pop de)
@@ -404,7 +432,6 @@ getInstruction = consumeByte >>= \case
   0xDE -> do
     v <- pc <<+= 1
     pure $ Sbc (Address v)
-  0xDF -> pure $ Rst 0x18
 
   0xE0 -> do
     mcycle 1
@@ -432,8 +459,6 @@ getInstruction = consumeByte >>= \case
     v <- consumeWord
     pure $ Ld (Address v) (Register $ af.upperByte)
 
-  0xEF -> pure $ Rst 0x28
-
   0xF0 -> do
     mcycle 1
     v <- fromIntegral <$> consumeByte
@@ -460,8 +485,6 @@ getInstruction = consumeByte >>= \case
     v <- pc <<+= 1
     pure $ Cmp $ Address v
 
-  0xFF -> pure $ Rst 0x38
-
   instr -> error $ "Unimplemented instruction: 0x" ++ showHex instr ""
 
            -- Utility functions to get instruction information from bytes.
@@ -485,3 +508,7 @@ toArgument i n = case shiftR n i .&. 7 of
 argCost :: Integer -> Integer -> Argument s -> Integer
 argCost rc _ (Register _) = rc
 argCost _ ac (Address  _) = ac
+
+arg16Cost :: Integer -> Integer -> Argument16 s -> Integer
+arg16Cost rc _ (Register16 _) = rc
+arg16Cost _ ac (Address16  _) = ac

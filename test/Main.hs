@@ -77,14 +77,14 @@ runTest test = do
   where joinBytes = (flip . (flip .)) (liftA2 (((.|.) . (`shiftL` 8)) `on` fromIntegral)) test
 
 spec = describe "SM83 instruction tests." do
-  let lessThanANames = map (("0" <>) . show) [0..6] -- Hack for filenames < 16, where '01' would be '1'.
-  let tests = [ (0x10, 0xF), (0x20, 0xF), (0x30, 0xF)
-              , (0x40, 0xF), (0x50, 0xF), (0x60, 0xF)
-              , (0x70, 0xF), (0x80, 0xF), (0x90, 0xF)
-              , (0xA0, 0xF), (0xB0, 0xF)
+  let lessThan0FNames = map (("0" <>) . (`showHex` "")) [0..0xF] -- Hack for filenames < 16, where '01' would be '1'.
+  let tests = [ (0x10, 0xF), (0x20, 0xF), (0x30, 0xF), (0x40, 0xF)
+              , (0x50, 0xF), (0x60, 0xF), (0x70, 0xF), (0x80, 0xF)
+              , (0x90, 0xF), (0xA0, 0xF), (0xB0, 0xF), (0xC0, 0xA), (0xCC, 0x3)
+              , (0xD0, 0xF)
               ]
 
-  forM_ (lessThanANames <> foldMap (uncurry genEnd) tests) \ns -> do
+  forM_ (lessThan0FNames <> foldMap (uncurry genEnd) tests) \ns -> do
     it ("tests the cpu instruction: " <> ns) do
       ts <- fromJust . decode <$> BL.readFile ("test/sm83/v1/" ++ ns ++ ".json")
       forM_ (ts :: [SM83Test]) testInstruction
