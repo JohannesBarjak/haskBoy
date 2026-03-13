@@ -42,11 +42,13 @@ data Instruction s
   | Dec (Argument s)
   | Dec16 !(ALens' Registers Word16)
   | Add (Argument s)
+  | Adc (Argument s)
   | Add16 !(ALens' Registers Word16)
   | StackStore !Word8
   | Sub (Argument s)
   | Sbc (Argument s)
   | Swap (Argument s)
+  | RrA | RlA
   | Bit !Int (Argument s)
   | Res !Int (Argument s)
   | Set !Int (Argument s)
@@ -143,6 +145,10 @@ execute = \case
     mcycle (argCost 1 2 arg)
     add =<< use (readArg arg)
 
+  Adc arg -> do
+    mcycle (argCost 1 2 arg)
+    adc =<< use (readArg arg)
+
   Add16 v -> do
     mcycle 2
     add16 =<< use (cloneLens $ register.v)
@@ -162,6 +168,9 @@ execute = \case
   Bit n arg -> do
     mcycle (argCost 2 3 arg)
     Instr.bit n =<< use (readArg arg)
+
+  RlA -> mcycle 1 >> rotA False
+  RrA -> mcycle 1 >> rotA True
 
   Res n arg -> do
     mcycle (argCost 2 4 arg)
@@ -248,6 +257,9 @@ getInstruction = consumeByte >>= \case
     v <- pc <<+= 1
     Ld <$> liftRd (toArgument 3 i) ?? Address v
 
+  -- At the moment stop will act as a nop instruction.
+  0x10 -> pure Nop
+
   0x09 -> pure $ Add16 bc
   0x0B -> pure $ Dec16 bc
   0x13 -> pure $ Inc16 de
@@ -308,6 +320,7 @@ getInstruction = consumeByte >>= \case
     pure $ Ld (Register $ af.upperByte) (Address v)
 
   i | instrEnd i == 0x80 -> Add <$> liftRd (toArgument 0 i)
+  i | instrEnd i == 0x88 -> Adc <$> liftRd (toArgument 0 i)
 
   0x18 -> pure (Jr True)
   0x20 -> Jr . not <$> use zero
@@ -367,6 +380,9 @@ getInstruction = consumeByte >>= \case
           pure $ Set (fromIntegral $ shiftR i 3 .&. 7) arg
 
     arg -> error $ "Invalid CB argument: " ++ showHex arg ""
+
+  0x17 -> pure RlA
+  0x1F -> pure RrA
 
   0xCD -> do
     tclock += 24

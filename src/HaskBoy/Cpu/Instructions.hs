@@ -3,10 +3,10 @@ module HaskBoy.Cpu.Instructions
   , and, xor, or
   , jr, call, jmp, ret
   , cmp
-  , add, sub, sbc
+  , add, adc, sub, sbc
   , add16
   , rl, bit, swap
-  , res
+  , rotA, res
   , cpl, scf, ccf
   , consumeByte, consumeWord
   , popStack, pushStack, stackStore
@@ -15,7 +15,7 @@ module HaskBoy.Cpu.Instructions
 import Control.Lens
 import Control.Monad.State.Strict
 
-import Data.Bits ((.&.), (.|.), shiftL, (.<<.), (.>>.), complement)
+import Data.Bits ((.&.), (.|.), shiftL, shiftR, (.<<.), (.>>.), complement)
 import Data.Bits qualified as Bits
 import Data.Word (Word8, Word16)
 import Foreign.Marshal.Utils (fromBool, toBool)
@@ -102,6 +102,19 @@ add n = do
 
   af.upperByte .= result
 
+adc :: (MonadState s m, HasRegisters s) => Word8 -> m ()
+adc n = do
+  a <- use (af.upperByte)
+  c <- fromBool <$> use carry
+  let result = a + n + c
+
+  zero .= (result == 0)
+  hcarry .= ((a .&. 0xF) + (n .&. 0xF) + c > 0xF)
+  carry .= (toInteger a + toInteger n + toInteger c > 0xFF)
+  subOp .= False
+
+  af.upperByte .= result
+
 add16 :: (MonadState s m, HasRegisters s) => Word16 -> m ()
 add16 w = do
   v <- use hl
@@ -142,6 +155,23 @@ rl r = do
   hcarry .= False
 
   where newCarry = toBool . (.&. (1 `shiftL` 7)) <$> use r
+
+-- | The boolean determines whether to rotate left or right, False is left and True is right.
+rotA :: (MonadState s m, HasRegisters s) => Bool -> m ()
+rotA right = do
+  c <- use carry
+  a <- use (af.upperByte)
+
+  zero   .= False
+  subOp  .= False
+  hcarry .= False
+
+  if right then do
+     carry .= toBool (a .&. 1)
+     af.upperByte .= (shiftR a 1 .&. 0x7F) .|. shiftL (fromBool c) 7
+   else do
+     carry .= toBool (a .&. 0x80)
+     af.upperByte .= (shiftL a 1 .&. 0xFE) + fromBool c
 
 -- This instructions swaps nibbles
 swap :: (MonadState s m, HasRegisters s) => Word8 -> m Word8
