@@ -372,7 +372,10 @@ getInstruction = consumeByte >>= \case
   0xC8 -> pure $ Ret (Just zero)
 
   0xC1 -> pure (Pop bc)
+  0xD1 -> pure (Pop de)
+
   0xC2 -> JmpC (zero.to not) <$> consumeWord
+  0xD2 -> JmpC (carry.to not) <$> consumeWord
   0xC3 -> mcycle 4 >> Jmp <$> consumeWord
 
   0xC5 -> Push <$> use bc
@@ -384,7 +387,8 @@ getInstruction = consumeByte >>= \case
     tclock += 16
     pure (Ret Nothing)
 
-  0xCA -> JmpC zero <$> consumeWord
+  0xCA -> JmpC zero  <$> consumeWord
+  0xDA -> JmpC carry <$> consumeWord
 
   0xCB -> consumeByte >>= \case
     i | instrEnd i == 0x30 -> Swap <$> liftRd (toArgument 0 i)
@@ -409,17 +413,19 @@ getInstruction = consumeByte >>= \case
   0x1F -> pure $ RotA True
 
   0xC4 -> CallC (zero.to not) <$> consumeWord
-  0xCC -> CallC zero <$> consumeWord
+  0xCC -> CallC zero  <$> consumeWord
+  0xDC -> CallC carry <$> consumeWord
   0xCD -> mcycle 6 >> Call <$> consumeWord
+  0xD4 -> CallC (carry.to not) <$> consumeWord
 
   0xC7 -> pure $ Rst 0x00
   0xCF -> pure $ Rst 0x08
+  0xD7 -> pure $ Rst 0x10
   0xEF -> pure $ Rst 0x28
   0xDF -> pure $ Rst 0x18
   0xFF -> pure $ Rst 0x38
 
   0xD0 -> pure $ Ret . Just $ carry.lens not (const not)
-  0xD1 -> pure (Pop de)
 
   0xD5 -> Push <$> use de
   0xD6 -> do

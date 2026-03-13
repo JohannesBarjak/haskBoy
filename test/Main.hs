@@ -80,11 +80,18 @@ spec = describe "SM83 instruction tests." do
   let lessThan0FNames = map (("0" <>) . (`showHex` "")) [0..0xF] -- Hack for filenames < 16, where '01' would be '1'.
   let tests = [ (0x10, 0xF), (0x20, 0xF), (0x30, 0xF), (0x40, 0xF)
               , (0x50, 0xF), (0x60, 0xF), (0x70, 0xF), (0x80, 0xF)
-              , (0x90, 0xF), (0xA0, 0xF), (0xB0, 0xF), (0xC0, 0xA), (0xCC, 0x3)
-              , (0xD0, 0xF)
+              , (0x90, 0xF), (0xA0, 0xF), (0xB0, 0xF), (0xC0, 0xF)
+              , (0xD0, 0xF), (0xE0, 0xF), (0xF0, 0xF)
               ]
 
-  forM_ (lessThan0FNames <> foldMap (uncurry genEnd) tests) \ns -> do
+  let invalidInstr = [ "cb", "d3", "db", "dd", "e3", "e4"
+                     , "eb", "ec", "ed", "f4", "fc", "fd"
+                     ]
+
+  let instrNames = filter (not . flip elem invalidInstr)
+        $ lessThan0FNames <> foldMap (uncurry genEnd) tests
+
+  forM_ instrNames \ns -> do
     it ("tests the cpu instruction: " <> ns) do
       ts <- fromJust . decode <$> BL.readFile ("test/sm83/v1/" ++ ns ++ ".json")
       forM_ (ts :: [SM83Test]) testInstruction

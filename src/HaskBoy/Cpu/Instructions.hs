@@ -299,7 +299,7 @@ consumeWord = do
   nn <- use pc
   pc += 2
 
-  use (mmu.addr16 nn)
+  use (readM16 nn)
 
 -- Read the current byte and then increase the pc register
 consumeByte :: (MonadState s m, HasRegisters s, HasMmu s) => m Word8
@@ -327,7 +327,7 @@ popStack = do
   nn <- use sp
   sp += 2
 
-  use (mmu.addr16 nn)
+  use (readM16 nn)
 
 -- Push to the 16-bit stack
 pushStack :: (MonadState s m, HasRegisters s, HasMmu s) => Word16 -> m ()
@@ -335,4 +335,4 @@ pushStack v = do
   sp -= 2
   nn <- use sp
 
-  mmu.addr16 nn .= v
+  writeM16 nn .= v
