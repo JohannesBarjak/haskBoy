@@ -63,7 +63,7 @@ data Instruction s
   | PopAF
   | Call !Word16
   | CallC !(Getter Registers Bool) !Word16
-  | Rst !(Getter Registers Word16) !Word16
+  | Rst !Word16
   | Ret !(Maybe (ALens' Registers Bool))
   | RetI
   | EnableInterrupt
@@ -235,9 +235,9 @@ execute = \case
   CallC c a -> use (register.c) >>= (`callC` a)
   Call v -> call v
 
-  Rst r v -> do
+  Rst v -> do
     mcycle 4
-    pushStack =<< use (register.r)
+    pushStack =<< use pc
     jmp v
 
   Ret mk -> mcycle 2 >> case mk of
@@ -412,11 +412,11 @@ getInstruction = consumeByte >>= \case
   0xCC -> CallC zero <$> consumeWord
   0xCD -> mcycle 6 >> Call <$> consumeWord
 
-  0xC7 -> pure $ Rst pc 0x00
-  0xCF -> pure $ Rst pc 0x08
-  0xEF -> pure $ Rst pc 0x28
-  0xDF -> pure $ Rst hl 0x18
-  0xFF -> pure $ Rst pc 0x38
+  0xC7 -> pure $ Rst 0x00
+  0xCF -> pure $ Rst 0x08
+  0xEF -> pure $ Rst 0x28
+  0xDF -> pure $ Rst 0x18
+  0xFF -> pure $ Rst 0x38
 
   0xD0 -> pure $ Ret . Just $ carry.lens not (const not)
   0xD1 -> pure (Pop de)
