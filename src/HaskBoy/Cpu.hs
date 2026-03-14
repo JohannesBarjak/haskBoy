@@ -19,9 +19,10 @@ import Control.Lens
 import Data.Bits (shiftL, shiftR, (.|.), (.&.))
 
 data Cpu = Cpu
-  { _register        :: !Registers
-  , _interruptEnable :: !Bool
-  , _tclock          :: !Integer -- ^ The Cpu clock uses tcycles
+  { _register :: !Registers
+  , _ime      :: !Bool
+  , _imeNext  :: !(Maybe Bool)
+  , _tclock   :: !Integer -- ^ The Cpu clock uses tcycles
   }
 
 -- | Store 16bit registers
@@ -50,7 +51,8 @@ newCpu = Cpu
     , _pc = 0x0100
     , _sp = 0xFFFE
     }
-  , _interruptEnable = True
+  , _ime = True
+  , _imeNext = Nothing
   , _tclock = 0
   }
 

@@ -53,6 +53,10 @@ data Instruction s
   | Swap (Argument s)
   | RotA Bool | RocA Bool
   | Bit !Int (Argument s)
+  | Rl  !(Argument s)
+  | Sla !(Argument s)
+  | Rr  !(Argument s)
+  | Sra !(Argument s)
   | Res !Int (Argument s)
   | Set !Int (Argument s)
   | Cmp (Argument s)
@@ -70,47 +74,37 @@ data Instruction s
   | EnableInterrupt
   | DisableInterrupt
 
-data Argument s where
-  Register :: HasRegisters s => (ALens' s Word8) -> Argument s
-  Address :: Word16 -> Argument s
-
-data Argument16 s where
-  Register16 :: HasRegisters s => (ALens' s Word16) -> Argument16 s
-  Address16  :: Word16 -> Argument16 s
-
-read8 :: HasMmu s => Argument s -> Getter s Word8
-read8 (Register r) = cloneLens r
-read8 (Address  a) = readM a
-
-write8 :: HasMmu s => Argument s -> Setter' s Word8
-write8 (Register r) = cloneLens r
-write8 (Address  a) = writeM a
-
-read16 :: HasMmu s => Argument16 s -> Getter s Word16
-read16 (Register16 r) = cloneLens r
-read16 (Address16  a) = readM16 a
-
-write16 :: HasMmu s => Argument16 s -> Setter' s Word16
-write16 (Register16 r) = cloneLens r
-write16 (Address16  a) = writeM16 a
-
 cycleCpu :: (MonadState s m, HasCpu s, HasRegisters s, HasMmu s) => m ()
 cycleCpu = do
   handleInterrupts
+  handleInputs
+
   execute =<< getInstruction
+
+handleInputs :: (MonadState s m, HasMmu s) => m ()
+handleInputs = writeM 0xFF00 .= 0xFF
 
 handleInterrupts :: (MonadState s m, HasMmu s, HasCpu s, HasRegisters s) => m ()
 handleInterrupts = mapM_ (uncurry handleInterrupt) [(0,0x40), (1,0x48)]
 
-  where handleInterrupt n a = do
-          iE <- use (readM 0xFFFF)
-          iF <- use (readM 0xFF0F)
+  where
+    handleInterrupt n a = do
+      iE <- use (readM 0xFFFF)
+      iF <- use (readM 0xFF0F)
+      iM <- use ime
 
-          when (iF^.bit n && iE^.bit n) $ do
-            pushStack =<< use pc
-            jmp a
-            writeM 0xFF0F .bit n .= False
-            mcycle 4
+      use imeNext >>= \case
+        Just True  -> imeNext .= Just False
+        Just False -> imeNext .= Nothing >> ime .= True
+        Nothing -> pure ()
+
+      when (iF^.bit n && iE^.bit n && iM) $ do
+        writeM 0xFF0F .bit n .= False
+        ime .= False
+
+        pushStack =<< use pc
+        jmp a
+        mcycle 4
 
 execute :: (MonadState s m, HasRegisters s, HasCpu s, HasMmu s) => Instruction s -> m ()
 execute = \case
@@ -195,6 +189,11 @@ execute = \case
     mcycle (argCost 2 3 arg)
     Instr.bit n =<< use (read8 arg)
 
+  Rl  arg -> mcycle (argCost 2 4 arg) >> rl  arg
+  Sla arg -> mcycle (argCost 2 4 arg) >> sla arg
+  Rr  arg -> mcycle (argCost 2 4 arg) >> rr  arg
+  Sra arg -> mcycle (argCost 2 4 arg) >> sra arg
+
   RocA b -> mcycle 1 >> rocA b
   RotA b -> mcycle 1 >> rotA b
 
@@ -250,11 +249,11 @@ execute = \case
 
   RetI -> do
     jmp =<< popStack
-    interruptEnable .= True
+    ime .= True
     mcycle 1
 
-  EnableInterrupt -> mcycle 1 >> interruptEnable .= True
-  DisableInterrupt -> mcycle 1 >> interruptEnable .= False
+  EnableInterrupt -> mcycle 1 >> imeNext .= Just True
+  DisableInterrupt -> mcycle 1 >> ime .= False
 
 liftRd :: (MonadState s m) => Reader s a -> m a
 liftRd = gets . runReader
@@ -394,6 +393,11 @@ getInstruction = consumeByte >>= \case
   0xDA -> JmpC carry <$> consumeWord
 
   0xCB -> consumeByte >>= \case
+    i | instrEnd i == 0x10 -> Rl  <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x20 -> Sla <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x18 -> Rr  <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x28 -> Sra <$> liftRd (toArgument 0 i)
+
     i | instrEnd i == 0x30 -> Swap <$> liftRd (toArgument 0 i)
 
     i | instrPrefix i == 0x40 -> do

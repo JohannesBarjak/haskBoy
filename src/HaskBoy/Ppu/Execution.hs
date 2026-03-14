@@ -87,11 +87,11 @@ spriteScan :: HasMmu s => s -> Seq (ObjAttr, Seq Pixel)
 spriteScan mem = scanAttr <&> (,) <*> liftA2 (tileRow mem) ri ti
 
   where scanAttr = S.take 10 $ S.filter visibleY (mem^.oam)
-        visibleY obj = inRange ((mem^.(readM ly) + 1 - size, mem^.(readM ly))&both +~ 16) (obj^.yPos)
+        visibleY obj = inRange ((mem^.readM ly + 1 - size, mem^.readM ly)&both +~ 16) (obj^.yPos)
         size = bool 8 16 (mem^.objSize)
 
-        ti obj = 0x8000 + (fromIntegral (obj^.tlIdx .&. addrMode) * 16)
-        ri obj = size - (obj^.yPos - (mem^.(readM ly)) + size - 16)
+        ti obj = 0x8000 + fromIntegral (obj^.tlIdx .&. addrMode) * 16
+        ri obj = size - (obj^.yPos - mem^.readM ly + size - 16)
         addrMode = bool 0xFF 0xFE (mem^.objSize)
 
 bgScanline :: HasMmu s => s -> Seq Pixel
@@ -101,24 +101,24 @@ bgScanline mem
   & S.cycleTaking 160
 
   where bgTileMaps = let ta = tileMapAddress + fromIntegral ti * 32 in
-          [mem^.readM i | i <- [ta..ta + 32]]
+          [ mem^.readM i | i <- [ta..ta + 32]]
 
         tileAddress :: Word8 -> Int
         tileAddress idx = if mem^.bgTileData
-          then 0x8000 + (fromIntegral idx * 16)
-          else 0x9000 + (twoCompl idx * 16)
+          then 0x8000 + fromIntegral idx * 16
+          else 0x9000 + twoCompl idx * 16
 
-        (ti, ri) = (mem^.(readM ly) + mem^.scy) `quotRem` 8
+        (ti, ri) = (mem^.readM ly + mem^.scy) `quotRem` 8
         tileMapAddress = bool 0x9800 0x9C00 (mem^.bgTileMap)
 
 -- Tile row, can be either a background or a sprite tile
 tileRow :: HasMmu s => s -> Word8 -> Address -> Seq Pixel
-tileRow mem ri ta = let ra = ta + (fromIntegral ri * 2) in
+tileRow mem ri ta = let ra = ta + fromIntegral ri * 2 in
   buildRow (mem^.readM ra) (mem^.readM (ra + 1))
 
   -- | Get a single tile row from a pair of bytes
   where buildRow :: Word8 -> Word8 -> Seq Pixel
-        buildRow v1 v2 = [on toPixel (`testBit` i) v1 v2 | i <- [7,6..0]]
+        buildRow v1 v2 = [ on toPixel (`testBit` i) v1 v2 | i <- [7,6..0]]
 
 twoCompl :: Word8 -> Int
 twoCompl b
@@ -127,10 +127,10 @@ twoCompl b
 
 ppuMode :: HasMmu s => Lens' s PpuMode
 ppuMode = lens _ppuMode \mem v ->
-  mem&ioreg.ix 0x41 .~ ((mem^?!ioreg.ix 0x41) .&. 0xFC) .|. fromIntegral (fromEnum v)
+  mem&ioreg.ix 0x41 .~ (mem^?!ioreg.ix 0x41) .&. 0xFC .|. fromIntegral (fromEnum v)
 
   where _ppuMode :: HasMmu s =>  s -> PpuMode
-        _ppuMode mem = toEnum . fromIntegral $ (mem^?!ioreg.ix 0x41) .&. 3
+        _ppuMode mem = toEnum . fromIntegral $ mem^?!ioreg.ix 0x41 .&. 3
 
 scx, scy :: HasMmu s => Lens' s Word8
 scx = lens (^?!ioreg.ix 0x43) \mem v -> mem&ioreg.ix 0x43 .~ v

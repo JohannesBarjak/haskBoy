@@ -8,11 +8,14 @@ module HaskBoy.Cpu.Instructions
   , add, adc, sub, sbc
   , daa
   , add16, addi8
-  , rl, bit, swap
+  , rl, sla, rr, sra
+  , bit, swap
   , rocA, rotA, res
   , cpl, scf, ccf
   , consumeByte, consumeWord
   , popStack, pushStack, stackStore
+  , Argument(..), Argument16(..)
+  , read8, write8, read16, write16
   , mcycle
   ) where
 
@@ -33,6 +36,14 @@ import HaskBoy.Cpu
 import HaskBoy.Mmu
 
 import Prelude hiding (and, or)
+
+data Argument s where
+  Register :: HasRegisters s => (ALens' s Word8) -> Argument s
+  Address :: Word16 -> Argument s
+
+data Argument16 s where
+  Register16 :: HasRegisters s => (ALens' s Word16) -> Argument16 s
+  Address16  :: Word16 -> Argument16 s
 
 inc :: (MonadState s m, HasRegisters s, HasMmu s) => Word8 -> m Word8
 inc v = do
@@ -193,21 +204,39 @@ bit n v = do
 res :: Int -> Word8 -> Word8
 res n v = v .&. (1 .<<. n)
 
-rl :: (MonadState s m, HasRegisters s) => Lens' s Word8 -> m ()
+rl :: (MonadState s m, HasRegisters s, HasMmu s) => Argument s -> m ()
 rl r = do
-  oldCarry <- use carry
+  c <- fromBool <$> use carry
+  v <- use (read8 r)
 
-  -- Set carry flag to the register's 7th bit
-  carry <~ newCarry
+  write8 r <.= shiftL v 1 + c >>= rotFlags (v .&. 0x80)
 
-  r %= (`shiftL` 1)
-  r += fromBool oldCarry
+sla :: (MonadState s m, HasRegisters s, HasMmu s) => Argument s -> m ()
+sla r = do
+  v <- use (read8 r)
+  write8 r <.= shiftL v 1 >>= rotFlags (v .&. 0x80)
 
-  zero <~ not . toBool <$> use r
-  subOp .= False
+rr :: (MonadState s m, HasRegisters s, HasMmu s) => Argument s -> m ()
+rr r = do
+  v <- use (read8 r)
+  c <- fromBool <$> use carry
+  let result = (shiftR v 1 .&. 0x7F) .|. shiftL c 7
+
+  write8 r .= result
+  rotFlags (v .&. 1) result
+
+sra :: (MonadState s m, HasRegisters s, HasMmu s) => Argument s -> m ()
+sra r = do
+  v <- use (read8 r)
+  let b7 = v .&. 0x80 in let b0 = v .&. 1 in
+    write8 r <.= shiftR v 1 .|. b7 >>= rotFlags b0
+
+rotFlags :: (HasRegisters s, MonadState s m) => Word8 -> Word8 -> m ()
+rotFlags b r = do
+  zero   .= (r == 0)
+  subOp  .= False
   hcarry .= False
-
-  where newCarry = toBool . (.&. (1 `shiftL` 7)) <$> use r
+  carry  .= toBool b
 
 rocA :: (MonadState s m, HasRegisters s) => Bool -> m ()
 rocA right = do
@@ -353,3 +382,19 @@ pushStack v = do
   nn <- use sp
 
   writeM16 nn .= v
+
+read8 :: HasMmu s => Argument s -> Getter s Word8
+read8 (Register r) = cloneLens r
+read8 (Address  a) = readM a
+
+write8 :: HasMmu s => Argument s -> Setter' s Word8
+write8 (Register r) = cloneLens r
+write8 (Address  a) = writeM a
+
+read16 :: HasMmu s => Argument16 s -> Getter s Word16
+read16 (Register16 r) = cloneLens r
+read16 (Address16  a) = readM16 a
+
+write16 :: HasMmu s => Argument16 s -> Setter' s Word16
+write16 (Register16 r) = cloneLens r
+write16 (Address16  a) = writeM16 a
