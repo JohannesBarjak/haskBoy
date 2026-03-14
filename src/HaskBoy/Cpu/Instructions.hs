@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeApplications #-}
 module HaskBoy.Cpu.Instructions
   ( inc, dec
   , and, xor, or
@@ -6,7 +7,7 @@ module HaskBoy.Cpu.Instructions
   , cmp
   , add, adc, sub, sbc
   , daa
-  , add16
+  , add16, addi8
   , rl, bit, swap
   , rocA, rotA, res
   , cpl, scf, ccf
@@ -23,6 +24,8 @@ import Data.Bits ((.&.), (.|.), shiftL, shiftR, (.<<.), (.>>.))
 import Data.Bits qualified as B
 
 import Data.Word (Word8, Word16)
+import Data.Int (Int8)
+
 import Data.Bool (bool)
 import Foreign.Marshal.Utils (fromBool, toBool)
 
@@ -53,14 +56,14 @@ dec v = do
 
 jr :: Bool -> (MonadState s m, HasCpu s, HasRegisters s, HasMmu s) => m ()
 jr jump = do
-  sb <- consumeByte
-  nn <- fromIntegral <$> use pc
+  sb <- fromIntegral . (fromIntegral @_ @Int8) <$> consumeByte
+  nn <- use pc
 
   if jump then do
-    jmp $ fromIntegral (nn + twoCompl sb)
-    tclock += 12
+    jmp $ nn + sb
+    mcycle 3
 
-  else tclock += 8
+  else mcycle 2
 
 cmp :: (MonadState s m, HasRegisters s) => Word8 -> m ()
 cmp n = do
@@ -126,6 +129,19 @@ sbc n = do
   subOp .= True
 
   af.upperByte .= result
+
+addi8 :: (MonadState s m, HasRegisters s) => Int8 -> m ()
+addi8 i = do
+  p <- use sp
+  let r = fromIntegral i
+
+  zero  .= False
+  subOp .= False
+
+  hcarry .= (p .&. 0x0F + r .&. 0x0F > 0x0F)
+  carry  .= (p .&. 0xFF + r .&. 0xFF > 0xFF)
+
+  sp .= p + r
 
 add :: (MonadState s m, HasRegisters s) => Word8 -> m ()
 add n = do
@@ -312,13 +328,14 @@ consumeByte = do
 stackStore :: (MonadState s m, HasRegisters s) => Word8 -> m ()
 stackStore v = do
   p <- use sp
+  let r = fromIntegral (fromIntegral v :: Int8)
 
   zero .= False
   subOp .= False
-  hcarry .= (fromIntegral v .&. 0xF + (p .&. 0xF) > 0xF)
-  carry .= (toInteger v + toInteger p > 0xFF)
+  hcarry .= (r .&. 0x0F + p .&. 0x0F > 0x0F)
+  carry  .= (r .&. 0xFF + p .&. 0xFF > 0xFF)
 
-  hl .= p + fromIntegral v
+  hl .= p + r
 
 
 -- Pop 16-bit stack

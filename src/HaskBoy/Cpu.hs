@@ -9,7 +9,6 @@ module HaskBoy.Cpu
   , zero, subOp, hcarry, carry
   , Registers(..)
   , HasRegisters(..)
-  , twoCompl
   , newCpu
   ) where
 
@@ -68,9 +67,3 @@ zero = af.lowerByte.bit 7
 subOp = af.lowerByte.bit 6
 hcarry = af.lowerByte.bit 5
 carry = af.lowerByte.bit 4
-
--- | Convert byte into a signed 'Int' using two's complement
-twoCompl :: Word8 -> Int
-twoCompl r8
-  | r8 < 128  = fromIntegral r8
-  | otherwise = -(256 - fromIntegral r8)

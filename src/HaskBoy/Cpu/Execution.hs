@@ -46,6 +46,7 @@ data Instruction s
   | Adc (Argument s)
   | DAA
   | Add16 !(ALens' Registers Word16)
+  | AddSp !Word8
   | StackStore !Word8
   | Sub (Argument s)
   | Sbc (Argument s)
@@ -123,8 +124,8 @@ execute = \case
     write8 lhs <~ use (read8 rhs)
 
   Ld16 lhs rhs -> do
-    mcycle 2
-    mcycle (arg16Cost 1 3 lhs)
+    mcycle (arg16Cost 1 4 lhs)
+    mcycle (arg16Cost 1 2 rhs)
 
     write16 lhs <~ use (read16 rhs)
 
@@ -175,6 +176,8 @@ execute = \case
   Add16 v -> do
     mcycle 2
     add16 =<< use (cloneLens $ register.v)
+
+  AddSp a -> mcycle 4 >> addi8 (fromIntegral a)
 
   Sub arg -> do
     mcycle (argCost 1 2 arg)
@@ -228,9 +231,7 @@ execute = \case
 
   PopAF -> do
     mcycle 3
-    v <- use (af.lowerByte)
-    af <~ popStack
-    af.lowerByte .= v
+    af <~ (.&. 0xFFF0) <$> popStack
 
   CallC c a -> use (register.c) >>= (`callC` a)
   Call v -> call v
@@ -310,6 +311,7 @@ getInstruction = consumeByte >>= \case
   i | instrEnd i == 0x90 -> Sub <$> liftRd (toArgument 0 i)
   i | instrEnd i == 0x98 -> Sbc <$> liftRd (toArgument 0 i)
   i | instrEnd i == 0xA8 -> Xor <$> liftRd (toArgument 0 i)
+  0xEE -> Xor . Address <$> (pc <<+= 1)
 
   0x12 -> do
      nn <- use de
@@ -345,6 +347,7 @@ getInstruction = consumeByte >>= \case
 
   i | instrEnd i == 0x80 -> Add <$> liftRd (toArgument 0 i)
   i | instrEnd i == 0x88 -> Adc <$> liftRd (toArgument 0 i)
+  0xE8 -> AddSp <$> consumeByte
 
   0x18 -> pure (Jr True)
   0x20 -> Jr . not <$> use zero
@@ -421,8 +424,10 @@ getInstruction = consumeByte >>= \case
   0xC7 -> pure $ Rst 0x00
   0xCF -> pure $ Rst 0x08
   0xD7 -> pure $ Rst 0x10
-  0xEF -> pure $ Rst 0x28
   0xDF -> pure $ Rst 0x18
+  0xE7 -> pure $ Rst 0x20
+  0xEF -> pure $ Rst 0x28
+  0xF7 -> pure $ Rst 0x30
   0xFF -> pure $ Rst 0x38
 
   0xD0 -> pure $ Ret . Just $ carry.lens not (const not)
@@ -449,6 +454,10 @@ getInstruction = consumeByte >>= \case
   0xE2 -> do
     v <- fromIntegral <$> use (bc.lowerByte)
     pure $ Ld (Address (0xFF00 + v)) (Register $ af.upperByte)
+
+  0xF2 -> let a = (Register $ af.upperByte) in
+          let ioAddress = Address . (0xFF00 +) . fromIntegral in
+            Ld a . ioAddress <$> use (bc.lowerByte)
 
   0xE5 -> Push <$> use hl
   0xE6 -> do
@@ -480,6 +489,7 @@ getInstruction = consumeByte >>= \case
     pure $ Or (Address v)
 
   0xF8 -> StackStore <$> consumeByte
+  0xF9 -> pure $ Ld16 (Register16 sp) (Register16 hl)
 
   0xFA -> do
     mcycle 2
