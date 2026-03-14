@@ -60,7 +60,7 @@ runTest test = do
   C.ime .= toBool (ime test)
 
   forM_ (ram test) \(a:v:_) -> writeM a .= fromIntegral v
-  cycleCpu
+  execute =<< getInstruction
 
   ram' <- forM (ram test) \(a:_) ->
     (a:) . pure . fromIntegral <$> use (readM a)
