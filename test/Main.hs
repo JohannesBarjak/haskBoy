@@ -24,6 +24,7 @@ import Data.Word (Word8, Word16)
 import Data.Function (on)
 import Control.Monad (forM, forM_)
 import Data.Maybe (fromJust)
+import Foreign.Marshal.Utils (toBool, fromBool)
 import Numeric (showHex)
 
 data SM83Test = SM83Test
@@ -39,6 +40,7 @@ data CpuTestState = CpuTestState
   , d :: Word8, e :: Word8, h :: Word8, l :: Word8
   , pc :: Word16, sp :: Word16
   , ram :: [[Word16]]
+  , ime :: Int
   } deriving (Show, Generic, Eq)
 
 instance FromJSON CpuTestState
@@ -55,6 +57,7 @@ runTest test = do
 
   C.pc .= pc test
   C.sp .= sp test
+  C.ime .= toBool (ime test)
 
   forM_ (ram test) \(a:v:_) -> writeM a .= fromIntegral v
   cycleCpu
@@ -72,33 +75,30 @@ runTest test = do
     , pc = cpu^.C.pc, sp = cpu^.C.sp
 
     , ram = ram'
+    , ime = fromBool $ cpu^.C.ime
     }
 
   where joinBytes = (flip . (flip .)) (liftA2 (((.|.) . (`shiftL` 8)) `on` fromIntegral)) test
 
 spec = describe "SM83 instruction tests." do
-  let lessThan0FNames = map (("0" <>) . (`showHex` "")) [0..0xF] -- Hack for filenames < 16, where '01' would be '1'.
-  let tests = [ (0x10, 0xF), (0x20, 0xF), (0x30, 0xF), (0x40, 0xF)
-              , (0x50, 0xF), (0x60, 0xF), (0x70, 0xF), (0x80, 0xF)
-              , (0x90, 0xF), (0xA0, 0xF), (0xB0, 0xF), (0xC0, 0xF)
-              , (0xD0, 0xF), (0xE0, 0xF), (0xF0, 0xF)
-              ]
+  let initialNames = map (("0" <>) . (`showHex` "")) [0..0xF] -- Hack for filenames < 16, where '01' would be '1'.
 
-  let invalidInstr = [ "cb", "d3", "db", "dd", "e3", "e4"
-                     , "eb", "ec", "ed", "f4", "fc", "fd"
-                     ]
+  let invInstr = [ "cb", "d3", "db", "dd", "e3", "e4"
+                 , "eb", "ec", "ed", "f4", "fc", "fd"
+                 ]
 
-  let instrNames = filter (not . flip elem invalidInstr)
-        $ lessThan0FNames <> foldMap (uncurry genEnd) tests
+  let cbInstr = map ("cb " <>) $ genNames 0x10 0x37
+
+  let instrNames = filter (not . flip elem invInstr)
+        $ initialNames <> genNames 0x10 0xFF <> cbInstr
 
   forM_ instrNames \ns -> do
     it ("tests the cpu instruction: " <> ns) do
       ts <- fromJust . decode <$> BL.readFile ("test/sm83/v1/" ++ ns ++ ".json")
       forM_ (ts :: [SM83Test]) testInstruction
 
-  where genNames   = map . (.|.)
-        genEnd :: Word16 -> Word16 -> [String]
-        genEnd p n = map (`showHex` "") $ genNames p [0..n]
+  where genNames :: Word16 -> Word16 -> [String]
+        genNames f b = map (`showHex` "") [f..b]
 
 testInstruction t = do
   let emptyMemory = fromJust $ toMemory (replicate 0x8000 0) RawAccess
