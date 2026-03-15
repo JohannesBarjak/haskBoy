@@ -1,7 +1,6 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE MonadComprehensions #-}
 {-# LANGUAGE OverloadedLists     #-}
-
 module HaskBoy.Ppu.Execution
   ( cyclePpu
   , drawTiles
@@ -36,36 +35,34 @@ import HaskBoy.BitOps
 
 cyclePpu :: (MonadState s m, HasMmu s, HasPpu s) => MaybeT m ()
 cyclePpu = do
-  prev_clk <- use clock
+  prevClk <- use clock
   pmode <- use ppuMode
 
-  writeM ly .= fromIntegral (prev_clk `quot` 456 `rem` 154)
-  lineY <- use (readM ly)
+  writeM ly .= fromIntegral (prevClk `quot` 456 `rem` 154)
+  lY <- use (readM ly)
 
-  when (lineY == 144) do
+  when (lY == 144) do
     ppuMode .= VBlank
     writeM 0xFF0F .bit 0 .= True
 
-  let mode = case prev_clk `rem` 456 of
-        x | x >= 172 -> HBlank
-        x | x >= 80 -> VramRead
-        _ -> OamRead
+  lCnd   <- use lyc
+  lCndIE <- use (readM 0xFF41 .bit 6)
 
-  guard (lineY < 144 && mode /= pmode)
+  when (lY == lCnd && lCndIE) $ writeM 0xFF0F .bit 1 .= True
+
+  let mode =
+        case prevClk `rem` 456 of
+          x | x >= 172 -> HBlank
+          x | x >= 80  -> VramRead
+          _            -> OamRead
+
+  guard (lY < 144 && mode /= pmode)
   ppuMode .= mode
 
   case mode of
-    OamRead -> do
-      lineCmp <- use lyc
-      when (lineY == lineCmp) lycUpdate
-
+    OamRead  -> pure ()
     VramRead -> drawTiles
     _ -> pure ()
-
-lycUpdate :: HasMmu s => MonadState s m => m ()
-lycUpdate = do
-  lycIE <- use (readM 0xFF41 . bit 6)
-  when lycIE $ writeM 0xFF0F . bit 1 .= True
 
 -- Draw background and sprites into the display.
 drawTiles :: (HasMmu s, HasPpu s) => MonadState s m => m ()

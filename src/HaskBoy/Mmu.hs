@@ -96,7 +96,7 @@ readM a = to readMmu
   where addrSpace = flip inRange a
         readBank mem bank start = Seq.index (mem^.bank) (fromIntegral a - start)
         readMmu mem
-          | addrSpace (0x0000, 0x7FFF) = readBank mem rom 0x0000
+          | addrSpace (0x0000, 0x7FFF) = readBank mem rom  0x0000
           | addrSpace (0x8000, 0x9FFF) = readBank mem vram 0x8000
           | addrSpace (0xA000, 0xBFFF) = readBank mem eram 0xA000
           | addrSpace (0xC000, 0xCFFF) = readBank mem wram 0xC000
@@ -110,7 +110,7 @@ readM a = to readMmu
                                            Bank0 -> 0xFF
 
           | addrSpace (0xFF00, 0xFF7F) = readBank mem ioreg 0xFF00
-          | addrSpace (0xFF80, 0xFFFE) = readBank mem hram 0xFF80
+          | addrSpace (0xFF80, 0xFFFE) = readBank mem hram  0xFF80
           | otherwise                  = mem^.ie
 
 -- | Provides restricted access to a Word in the 'Mmu'.

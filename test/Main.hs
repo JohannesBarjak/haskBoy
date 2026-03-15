@@ -87,7 +87,7 @@ spec = describe "SM83 instruction tests." do
                  , "eb", "ec", "ed", "f4", "fc", "fd"
                  ]
 
-  let cbInstr = map ("cb " <>) $ genNames 0x10 0x37
+  let cbInstr = map ("cb " <>) $ genNames 0x10 0xFF
 
   let instrNames = filter (not . flip elem invInstr)
         $ initialNames <> genNames 0x10 0xFF <> cbInstr

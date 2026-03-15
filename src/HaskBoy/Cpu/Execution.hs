@@ -57,6 +57,7 @@ data Instruction s
   | Sla !(Argument s)
   | Rr  !(Argument s)
   | Sra !(Argument s)
+  | Srl !(Argument s)
   | Res !Int (Argument s)
   | Set !Int (Argument s)
   | Cmp (Argument s)
@@ -193,13 +194,14 @@ execute = \case
   Sla arg -> mcycle (argCost 2 4 arg) >> sla arg
   Rr  arg -> mcycle (argCost 2 4 arg) >> rr  arg
   Sra arg -> mcycle (argCost 2 4 arg) >> sra arg
+  Srl arg -> mcycle (argCost 2 4 arg) >> srl arg
 
   RocA b -> mcycle 1 >> rocA b
   RotA b -> mcycle 1 >> rotA b
 
   Res n arg -> do
     mcycle (argCost 2 4 arg)
-    (write8 arg .=) <$> res n =<< use (read8 arg)
+    write8 arg %= res n
 
   Set n arg -> do
     mcycle (argCost 2 4 arg)
@@ -397,6 +399,7 @@ getInstruction = consumeByte >>= \case
     i | instrEnd i == 0x20 -> Sla <$> liftRd (toArgument 0 i)
     i | instrEnd i == 0x18 -> Rr  <$> liftRd (toArgument 0 i)
     i | instrEnd i == 0x28 -> Sra <$> liftRd (toArgument 0 i)
+    i | instrEnd i == 0x38 -> Srl <$> liftRd (toArgument 0 i)
 
     i | instrEnd i == 0x30 -> Swap <$> liftRd (toArgument 0 i)
 

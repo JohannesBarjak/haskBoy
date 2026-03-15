@@ -8,7 +8,8 @@ module HaskBoy.Cpu.Instructions
   , add, adc, sub, sbc
   , daa
   , add16, addi8
-  , rl, sla, rr, sra
+  , rl, sla
+  , rr, sra, srl
   , bit, swap
   , rocA, rotA, res
   , cpl, scf, ccf
@@ -202,7 +203,7 @@ bit n v = do
   subOp .= False
 
 res :: Int -> Word8 -> Word8
-res n v = v .&. (1 .<<. n)
+res n v = v .&. B.complement (1 .<<. n)
 
 rl :: (MonadState s m, HasRegisters s, HasMmu s) => Argument s -> m ()
 rl r = do
@@ -230,6 +231,11 @@ sra r = do
   v <- use (read8 r)
   let b7 = v .&. 0x80 in let b0 = v .&. 1 in
     write8 r <.= shiftR v 1 .|. b7 >>= rotFlags b0
+
+srl :: (MonadState s m, HasRegisters s, HasMmu s) => Argument s -> m ()
+srl r = do
+  v <- use (read8 r)
+  write8 r <.= B.shiftR v 1 >>= rotFlags (v .&. 1)
 
 rotFlags :: (HasRegisters s, MonadState s m) => Word8 -> Word8 -> m ()
 rotFlags b r = do
